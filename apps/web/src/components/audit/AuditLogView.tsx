@@ -76,7 +76,7 @@ export function AuditLogView() {
   if (actionFilter) params.set('action', actionFilter);
   if (resourceFilter) params.set('resource', resourceFilter);
 
-  const { data: raw, error } = useSWR<AuditListResponse>(
+  const { data: raw, error, isLoading } = useSWR<AuditListResponse>(
     `/api/v1/audit?${params}`,
     fetcher,
     { refreshInterval: 30_000, fallbackData: MOCK_AUDIT, shouldRetryOnError: false, errorRetryCount: 0, revalidateOnFocus: false }

@@ -628,7 +628,7 @@ function WorkspacePanel() {
         <InfoTile label="Tenant ID" value="tenant_demo_01H0XE4T2WJ9N6" mono />
         <InfoTile label="Plan" value="Open-source (MIT)" />
         <InfoTile label="Region" value="us-east-1 / Multi-AZ" />
-        <InfoTile label="Created" value={format(NOW - 1000 * 60 * 60 * 24 * 96, 'PPP')} />
+        <InfoTile label="Created" value={format(Date.now() - 1000 * 60 * 60 * 24 * 96, 'PPP')} />
         <InfoTile
           label="Default locale"
           value={`${Intl.DateTimeFormat().resolvedOptions().locale} • 24h`}

@@ -324,8 +324,12 @@ export function CaseWorkspace({ caseId }: { caseId: string }) {
     return undefined;
   }, [data, useFallback, caseId]);
 
-  // Track demo mode for the header banner.
-  if (useFallback && !demoMode) setDemoMode(true);
+  // Track demo mode for the header banner. Calling setState during render is
+  // a React anti-pattern that can interact badly with hydration; defer to an
+  // effect so the first paint matches between server and client.
+  useEffect(() => {
+    if (useFallback && !demoMode) setDemoMode(true);
+  }, [useFallback, demoMode]);
 
   // ─── Investigation state ───────────────────────────────────────────────────
   const [investigating, setInvestigating] = useState(false);

@@ -96,10 +96,12 @@ const MOCK_ENTITIES: EntityRiskRecord[] = [
 ];
 
 const MOCK_ENTITY_STATS: EntityRiskStats = {
+  tenant_id: 'demo',
   total: 5,
   promoted: 2,
   alert_count: 26,
   threshold: 80,
+  bands: { critical: 1, high: 1, medium: 2, low: 1 },
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -465,7 +467,7 @@ export function EntityRiskQueue() {
   const { data: queue, error: queueError, isLoading: queueLoading } = useSWR(
     ['entity-risk-queue', promotedOnly],
     () => entityRiskApi.queue({ limit: 50, promotedOnly }),
-    { refreshInterval: 30000, fallbackData: { entities: MOCK_ENTITIES, threshold: 80 } },
+    { refreshInterval: 30000, fallbackData: { tenant_id: 'demo', entities: MOCK_ENTITIES, threshold: 80 } },
   );
   const { data: stats } = useSWR<EntityRiskStats>(
     'entity-risk-stats',

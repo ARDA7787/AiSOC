@@ -74,7 +74,7 @@ export function ConnectorsView() {
   const { data, error, isLoading, mutate } = useSWR(
     'connectors',
     () => connectorsApi.list(),
-    { revalidateOnFocus: false, fallbackData: { connectors: DEMO_CONNECTORS } },
+    { revalidateOnFocus: false, fallbackData: { connectors: DEMO_CONNECTORS, total: DEMO_CONNECTORS.length } },
   );
 
   // Health summary is a separate endpoint so the empty/error case is silent —

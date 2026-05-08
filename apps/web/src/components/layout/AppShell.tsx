@@ -5,6 +5,7 @@ import { TopBar } from './TopBar';
 import { CommandPalette } from './CommandPalette';
 import { CopilotDock } from '@/components/copilot/CopilotDock';
 import { DemoBanner } from '@/components/demo/DemoBanner';
+import { ClientOnly } from '@/components/util/ClientOnly';
 import { isDemoMode } from '@/lib/demoMode';
 
 interface AppShellProps {
@@ -27,10 +28,19 @@ export function AppShell({ children }: AppShellProps) {
           <div className="p-6">{children}</div>
         </main>
       </div>
-      {/* Floating Copilot launcher (hidden on /copilot itself) */}
-      <CopilotDock />
-      {/* Global command palette (⌘K) */}
-      <CommandPalette />
+      {/*
+        Floating Copilot launcher and global command palette both rely on
+        Framer Motion, which serializes inline `transform` styles differently
+        on server vs client and triggers a hydration mismatch (React #418).
+        Wrapping them in ClientOnly defers their entire render to after mount
+        so SSR ships nothing for these subtrees.
+      */}
+      <ClientOnly>
+        <CopilotDock />
+      </ClientOnly>
+      <ClientOnly>
+        <CommandPalette />
+      </ClientOnly>
     </div>
   );
 }
