@@ -291,9 +291,10 @@ export default function HoneytokensPage() {
 
   const listKey = `${API}/api/v1/honeytokens?tenant_id=${TENANT_ID}${statusFilter ? `&status=${statusFilter}` : ""}${typeFilter ? `&token_type=${typeFilter}` : ""}`;
 
-  const { data: tokens, isLoading } = useSWR<HoneytokenRecord[]>(listKey, fetcher, {
+  const { data: rawTokens, isLoading } = useSWR<HoneytokenRecord[]>(listKey, fetcher, {
     refreshInterval: 15_000,
   });
+  const tokens = Array.isArray(rawTokens) ? rawTokens : undefined;
 
   const refresh = () => mutate(listKey);
 
