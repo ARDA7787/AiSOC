@@ -12,12 +12,23 @@ public, reproducible eval harness on every PR targeting `main` / `develop`.
 
 ## Capabilities
 
-- **Click-and-connect cloud connectors** — pick from a 14-connector catalog (Microsoft Entra, Azure Activity, Defender XDR, GCP Cloud Audit, GCP SCC, Microsoft 365 audit, Google Workspace, Cloudflare, GitHub, plus the original CrowdStrike / Splunk / AWS Security Hub / Okta / Microsoft Sentinel set), fill a schema-driven form, click `Test connection` for a live auth round-trip, and `Save & enable`. Secrets are encrypted at the application layer with a Fernet [`CredentialVault`](./operations/credentials) before they hit Postgres; an in-process APScheduler polls each enabled instance and pushes normalized OCSF events through to the ingest spine. Setup walkthroughs: [docs/connectors](./connectors).
+- **Click-and-connect cloud connectors** — pick from a 26-connector catalog spanning EDR, SIEM, cloud, IAM, SaaS, VCS, and network sources (CrowdStrike, Splunk, AWS Security Hub, Okta, Microsoft Sentinel, Entra, Azure Activity, Defender XDR, GCP Cloud Audit, GCP SCC, M365, Google Workspace, Cloudflare, GitHub, Tailscale, SentinelOne, Cortex XDR, Duo Security, Wiz, Snyk, Zscaler, Proofpoint, ServiceNow, Jira, 1Password). Fill a schema-driven form, click `Test connection` for a live auth round-trip, and `Save & enable`. Secrets are encrypted at the application layer with a Fernet [`CredentialVault`](./operations/credentials) before they hit Postgres; an in-process APScheduler polls each enabled instance and pushes normalized OCSF events through to the ingest spine. Setup walkthroughs: [docs/connectors](./connectors).
 - **Investigation Ledger** — every prompt, response, evidence citation, and tool call the agent emits is logged step-by-step and replayable on each case.
 - **Public eval harness** — alert reduction (a real measurement on a fixed noisy stream) plus MITRE-tactic, investigation-completeness, and response-quality substrate self-consistency gates. Reproducible with one command and run in CI on every PR. The [eval harness page](./benchmark) documents what each suite does and does not measure.
 - **Ambient Copilot** — context-aware next-action suggestions on every alert, case, rule, and playbook page; one click runs the right agent tool with the right payload.
 - **Responder PWA** — installable mobile route at `/responder/*` with passkey-only login, on-call rotation, approvals queue, VAPID Web Push, and offline shell.
-- **LangGraph multi-agent investigation** — orchestrator, recon, forensic, responder, and report-writer agents grounded in MITRE ATT&CK with Qdrant RAG memory.
+- **LangGraph multi-agent investigation** — orchestrator, recon, forensic, responder, and report-writer agents grounded in MITRE ATT&CK with Qdrant RAG memory. Includes domain-specific agents for phishing triage, identity threat analysis, cloud misconfiguration detection, and insider threat scoring.
+- **Autonomous alert triage** — LLM-based auto-triage agent classifies alerts as true positive, false positive, or benign with confidence scoring. High-confidence false positives are auto-closed; uncertain alerts escalate to human analysts.
+- **Conversational investigation chat** — multi-turn NL interface for querying alerts, cases, and threat intel with quick actions and a persistent investigation context panel.
+- **MITRE ATT&CK coverage advisor** — identifies detection gaps across tactics, recommends new rules, and enables one-click detection generation for uncovered techniques.
+- **Shift handoff dashboard** — SOC shift management with handoff item tracking, shift summary KPIs (alerts triaged, cases opened, escalations), and report generation.
+- **EASM (External Attack Surface Management)** — continuous asset discovery, exposed service detection, certificate monitoring with expiry alerts, and risk scoring.
+- **MSSP executive dashboard** — cross-tenant view with aggregated KPIs (MTTD, MTTR, SLA compliance, ARR) and per-tenant risk scoring for managed security providers.
+- **Alert noise tuning** — closed-loop dashboard driven by analyst TP/FP verdicts, with auto-tune toggles per rule and monthly noise trend visualization.
+- **Team analytics & gamification** — analyst leaderboard with sortable performance metrics, badges (MITRE Master, Speed Demon, Zero FP, Precision Strike), and team highlights feed.
+- **STIX/TAXII publishing** — bidirectional threat intel sharing with STIX 2.1 bundle creation and TAXII collection management.
+- **Automated compliance evidence** — continuous collection from connected sources across SOC 2, ISO 27001, NIST CSF, PCI-DSS, HIPAA, and DORA frameworks.
+- **AI-generated incident reports** — one-click PDF/MD export of case investigation summaries directly from the case detail view.
 - **Real-time fusion** — Kafka spine with sub-second alert ingestion, Bloom-filter dedup on 10M+ IOCs, ML scoring (LightGBM + Isolation Forest).
 - **Attack graph** — Neo4j entity graph with attack-path reconstruction and blast-radius gating on automated actions.
 - **UEBA** — per-user Welford online baseline, Z-score anomaly scoring, and Kafka-integrated anomaly publishing.
@@ -65,7 +76,7 @@ See the full [Architecture](./architecture) page for the detailed service map an
 ## Quick Links
 
 - [Quick Start](./quickstart) — `pnpm aisoc:demo`, under 5 minutes to a live investigation
-- [Connectors](./connectors) — click-and-connect catalog with 14 cloud / SaaS / SIEM / EDR / VCS sources
+- [Connectors](./connectors) — click-and-connect catalog with 26 cloud / SaaS / SIEM / EDR / IAM / VCS / network sources
 - [Operations: Credentials](./operations/credentials) — `CredentialVault` threat model, key rotation, hosted-OAuth roadmap
 - [Public eval harness](./benchmark) — alert reduction (real measurement) plus MITRE / completeness / response-quality substrate self-consistency gates
 - [MCP Integration](./integrations/mcp) — connect Claude / Cursor / Continue / Cody
