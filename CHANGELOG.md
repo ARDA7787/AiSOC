@@ -755,11 +755,11 @@ demo profile. Details below.
 - **Docker Compose obsolete `version` warning** — removed `version: '3.8'`
   from `docker-compose.demo.yml`.
 - **Repository hygiene** — added `.gocache/`, `*.tsbuildinfo`,
-  `apps/docs/.docusaurus/`, `apps/docs/build/`, `.cursor/hooks/state/`,
+  `apps/docs/.docusaurus/`, `apps/docs/build/`,
   `plugins/**/*-build-test`, `plugins/**/*-build`,
   `eval_report.json`, and `eval_mitre_accuracy_report.json` to
-  `.gitignore`. Removed previously tracked Docusaurus cache and Cursor
-  hook state files from the index.
+  `.gitignore`. Removed previously tracked Docusaurus cache and local
+  IDE hook state files from the index.
 
 ---
 

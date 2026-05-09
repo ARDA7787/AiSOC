@@ -55,7 +55,7 @@ The connector automatically refreshes the access token before expiry — no manu
 - Default interval: **300 seconds**.
 - Per poll, the connector calls `GET /api/v2/tailnet/{tailnet}/audit?startTime=<lastpoll>` with cursor-based pagination.
 - The `startTime` parameter is set to `now() - poll_interval` on each run. For the very first run, the connector looks back 5 minutes.
-- Cursor pagination continues until no `nextCursor` is returned, ensuring no events are dropped between polls.
+- Pagination continues until no `nextCursor` is returned, ensuring no events are dropped between polls.
 
 ## Severity heuristics
 
