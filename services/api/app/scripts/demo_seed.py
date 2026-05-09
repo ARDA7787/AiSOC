@@ -1,9 +1,9 @@
 """demo_seed — Reset and warm up the hosted demo at tryaisoc.com.
 
-This is the canonical entrypoint for the hosted-demo refresh job. It runs
-inside the api image (so it gets DATABASE_URL via Fly Postgres attach,
-REDIS_URL via Upstash attach, and access to the rest of the API package),
-and is invoked one of three ways:
+This is the kickoff wrapper around the canonical ``seed_demo`` entrypoint.
+It runs inside the api image (so it gets DATABASE_URL via Fly Postgres
+attach, REDIS_URL via Upstash attach, and access to the rest of the API
+package), and is invoked one of three ways:
 
 * **Post-deploy** — `infra/fly/fly-demo-deploy.sh` runs it via
   `flyctl ssh console -a aisoc-demo-api -C "python -m app.scripts.demo_seed
@@ -17,12 +17,21 @@ and is invoked one of three ways:
   shim, which just re-execs this module.)
 
 Why three responsibilities in one entrypoint?
-1. Drop demo-tenant data so each visitor sees the same canonical INC-001.
+1. Drop demo-tenant data so each visitor sees the same canonical
+   ``INC-RT-001`` LockBit 3.0 in-flight ransomware investigation.
 2. Re-seed canonical demo data via the existing ``seed_demo`` module —
    same data self-hosters get with ``pnpm seed:demo``.
-3. Pre-warm an investigation so the deeplink ``/cases/INC-001?tab=ledger``
-   already has agent events streaming when the browser arrives. This is
-   the keystone of the sub-60s time-to-first-investigation target.
+3. Pre-warm an investigation so the deeplink
+   ``/cases/INC-RT-001?tab=ledger`` already has agent events streaming
+   when the browser arrives. This is the keystone of the sub-5min
+   clone-to-investigation target.
+
+For most platforms (Render, Railway, Coolify, docker-compose), the
+release/preDeploy command runs ``python -m app.scripts.seed_demo``
+directly — no kickoff is needed because the seed already populates the
+in-flight investigation artifacts. This wrapper is only required when
+you want a *live agent run* streaming on top of seeded state, which is
+the Fly hosted-demo experience.
 
 Idempotent. Safe to re-run. ``--dry-run`` prints actions without touching
 any state.
@@ -53,7 +62,7 @@ log = logging.getLogger("demo-seed")
 CORE_API_URL = os.getenv("CORE_API_URL", "http://localhost:8000")
 AGENTS_API_URL = os.getenv("AGENTS_API_URL", "http://aisoc-demo-agents.internal:8084")
 DEMO_TENANT = os.getenv("AISOC_DEMO_TENANT", "demo")
-DEMO_CASE_ID = os.getenv("AISOC_DEMO_CASE_ID", "INC-001")
+DEMO_CASE_ID = os.getenv("AISOC_DEMO_CASE_ID", "INC-RT-001")
 HTTP_TIMEOUT = float(os.getenv("AISOC_DEMO_HTTP_TIMEOUT", "30"))
 
 
@@ -112,7 +121,7 @@ def _run_local_seeder() -> None:
 
 
 async def _kickoff_investigation(client: httpx.AsyncClient) -> str | None:
-    """Start an agent run against ``INC-001`` so the demo lands hot.
+    """Start an agent run against ``INC-RT-001`` so the demo lands hot.
 
     Returns the run_id on success, or None if the agent declined (e.g.,
     no model key + deterministic mode disabled). We never fail the deploy
@@ -198,7 +207,7 @@ def main() -> int:
     p.add_argument(
         "--kickoff-investigation",
         action="store_true",
-        help="Start an agent run against INC-001 so the deeplink lands hot.",
+        help="Start an agent run against INC-RT-001 so the deeplink lands hot.",
     )
     p.add_argument(
         "--wait-for-api",

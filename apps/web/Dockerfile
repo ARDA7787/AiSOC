@@ -49,6 +49,30 @@ ARG NEXT_PUBLIC_WS_URL=""
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
 
+# ─── Build-time demo-mode flags (client-side bundle) ────────────────────────
+# These drive the in-bundle demo experience read by `apps/web/src/lib/demoMode.ts`:
+#   - NEXT_PUBLIC_DEMO_MODE: gates the banner, auto-login, and read-only UI
+#   - NEXT_PUBLIC_DEMO_DEEPLINK: the case URL the onboarding "Try Demo" CTA targets
+#   - NEXT_PUBLIC_DEMO_BANNER: top-of-page banner copy
+#   - NEXT_PUBLIC_DEMO_AUTOLOGIN_EMAIL/_PASSWORD: credentials DemoAutoLogin uses on
+#     first paint so visitors land already authenticated and can roam
+#
+# Defaults match the canonical hosted demo so a no-arg `docker build` of the web
+# image (e.g. CI's publish-images.yml) ships a demo-ready bundle. Production
+# customers override NEXT_PUBLIC_DEMO_MODE="" at build time to suppress all
+# demo affordances. The api/agents/realtime images are unaffected — demo gating
+# in those services is runtime via AISOC_DEMO_MODE, not build-time.
+ARG NEXT_PUBLIC_DEMO_MODE="true"
+ARG NEXT_PUBLIC_DEMO_DEEPLINK="/cases/INC-RT-001?tab=ledger"
+ARG NEXT_PUBLIC_DEMO_BANNER="Demo data resets daily at 00:00 UTC. All write actions are disabled."
+ARG NEXT_PUBLIC_DEMO_AUTOLOGIN_EMAIL="demo@aisoc.dev"
+ARG NEXT_PUBLIC_DEMO_AUTOLOGIN_PASSWORD="aisoc-demo"
+ENV NEXT_PUBLIC_DEMO_MODE=${NEXT_PUBLIC_DEMO_MODE}
+ENV NEXT_PUBLIC_DEMO_DEEPLINK=${NEXT_PUBLIC_DEMO_DEEPLINK}
+ENV NEXT_PUBLIC_DEMO_BANNER=${NEXT_PUBLIC_DEMO_BANNER}
+ENV NEXT_PUBLIC_DEMO_AUTOLOGIN_EMAIL=${NEXT_PUBLIC_DEMO_AUTOLOGIN_EMAIL}
+ENV NEXT_PUBLIC_DEMO_AUTOLOGIN_PASSWORD=${NEXT_PUBLIC_DEMO_AUTOLOGIN_PASSWORD}
+
 # Use pnpm's default symlinked node_modules — same layout as local dev,
 # so tsup/tsc bin shims resolve correctly inside each workspace package.
 RUN pnpm install --no-frozen-lockfile

@@ -48,6 +48,25 @@ healthcheckTimeout = 60
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
+# Run migrations + idempotent demo seed in a temporary VM before the new
+# release is promoted. This is what makes the Railway "Deploy" button a
+# real one-click experience: by the time the api goes healthy and the
+# user opens the web service, the canonical 15-incident demo (with the
+# in-flight LockBit 3.0 ransomware investigation INC-RT-001 already
+# streaming agent decisions) is sitting in Postgres waiting to be seen.
+#
+# Why preDeployCommand vs startCommand:
+#   - preDeployCommand runs once per deploy in an isolated VM with all
+#     env vars wired up. Failures abort the release before traffic is
+#     swung over — exactly the gate we want for migrations.
+#   - startCommand would re-run migrations + seed on *every* container
+#     restart, which is wasteful and racy under multiple replicas.
+#
+# Idempotency: services/api/app/scripts/seed_demo.py short-circuits when
+# the demo tenant already exists, so re-running on every deploy (which
+# is what Railway does) is cheap.
+preDeployCommand = "alembic upgrade head && python -m app.scripts.seed_demo"
+
 # Service-level env. The actual secrets (DATABASE_URL, REDIS_URL) are
 # auto-injected by Railway when you attach the Postgres + Redis plugins
 # — we do NOT set them here, because hardcoding `${{ Postgres.DATABASE_URL }}`

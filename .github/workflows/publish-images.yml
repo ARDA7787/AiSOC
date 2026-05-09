@@ -72,6 +72,27 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=sha,prefix=sha-,format=short
 
+      # Web image needs NEXT_PUBLIC_DEMO_* flags baked in at build time so
+      # the published ghcr.io/beenuar/aisoc-web image used by `pnpm aisoc:demo`
+      # ships a bundle that knows it's a demo (banner, auto-login, deeplink).
+      # Without these the bundle has empty strings → demo affordances no-op
+      # and visitors get bounced to /login on first navigation. Other images
+      # (api/agents/realtime) gate demo behavior at runtime via AISOC_DEMO_MODE
+      # so they don't need build args. The Dockerfile already defaults these
+      # to demo values; setting them here is explicit-is-better-than-implicit.
+      - id: web-build-args
+        if: matrix.service == 'web'
+        run: |
+          {
+            echo 'build_args<<EOF'
+            echo 'NEXT_PUBLIC_DEMO_MODE=true'
+            echo 'NEXT_PUBLIC_DEMO_DEEPLINK=/cases/INC-RT-001?tab=ledger'
+            echo 'NEXT_PUBLIC_DEMO_BANNER=Demo data resets daily at 00:00 UTC. All write actions are disabled.'
+            echo 'NEXT_PUBLIC_DEMO_AUTOLOGIN_EMAIL=demo@aisoc.dev'
+            echo 'NEXT_PUBLIC_DEMO_AUTOLOGIN_PASSWORD=aisoc-demo'
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
@@ -79,6 +100,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ steps.web-build-args.outputs.build_args }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
           platforms: linux/amd64

@@ -44,7 +44,7 @@ kill_timeout   = "5s"
   PORT             = "8000"
   # Demo gates: write actions return 403, mutating endpoints become read-only
   AISOC_DEMO_MODE  = "true"
-  # Tenant rotation runs daily; the seeder writes the canonical INC-001 case
+  # Tenant rotation runs daily; the seeder writes the canonical INC-RT-001 case
   AISOC_DEMO_TENANT = "demo"
   # Disable optional integrations (no Kafka/ClickHouse/OpenSearch on demo)
   AISOC_DISABLE_KAFKA      = "true"

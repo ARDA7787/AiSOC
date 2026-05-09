@@ -302,9 +302,10 @@ function TaskRow({ task, onChangeStatus }: TaskRowProps) {
 
 export function CaseWorkspace({ caseId }: { caseId: string }) {
   const [demoMode, setDemoMode] = useState(false);
-  // Honor `?tab=…` so the hosted demo deeplink (`/cases/INC-001?tab=ledger`)
-  // lands visitors directly on the live agent decision feed. Falls back to
-  // the overview when the param is missing or unrecognized.
+  // Honor `?tab=…` so the hosted demo deeplink
+  // (`/cases/INC-RT-001?tab=ledger`) lands visitors directly on the live
+  // agent decision feed for the LockBit 3.0 ransomware showcase. Falls back
+  // to the overview when the param is missing or unrecognized.
   const searchParams = useSearchParams();
   const initialTab: WorkspaceTab = useMemo(() => {
     const t = searchParams?.get('tab') ?? null;

@@ -17,23 +17,30 @@
  *
  * On a warm Docker daemon the full path is roughly 3.5 minutes:
  * about 90s pull + 60s startup + 30s seed + 30s investigation. The
- * v1.0 acceptance gate is clone-to-investigation in ≤ 5 minutes on a
- * clean Mac with a cold Docker daemon.
+ * v1.0 acceptance gate (the WS-A acceptance to-do in the buyer-value
+ * plan) is clone-to-investigation in ≤ 5 minutes on a clean Mac with
+ * a cold Docker daemon. The `--budget-ms` flag enforces this gate
+ * automatically and `--results-file` writes a phase-by-phase JSON
+ * timing report so CI / nightly runs can spot regressions.
  *
  * Usage: pnpm aisoc:demo
  *
  * Flags:
- *   --no-pull    skip the `docker compose pull` step (use cached images)
- *   --no-open    skip launching the browser (CI / headless usage)
- *   --rebuild    docker compose up --build instead of using prebuilt images
- *   --tag <tag>  override AISOC_TAG (default: latest)
+ *   --no-pull             skip the `docker compose pull` step (use cached images)
+ *   --no-open             skip launching the browser (CI / headless usage)
+ *   --rebuild             docker compose up --build instead of using prebuilt images
+ *   --tag <tag>           override AISOC_TAG (default: latest)
+ *   --budget-ms <number>  fail with exit 3 if total elapsed exceeds this many ms
+ *   --results-file <p>    write per-phase timing JSON to <p> (used by acceptance)
  *
  * Exit codes:
  *   0 = success, browser opened
  *   1 = failed to start the stack
  *   2 = stack started but data could not be seeded or investigated
+ *   3 = success but exceeded --budget-ms (acceptance regression)
  */
 import { execSync, spawnSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { join } from "node:path";
 import { platform } from "node:os";
@@ -41,6 +48,32 @@ import { platform } from "node:os";
 const ROOT = join(__dirname, "..");
 const COMPOSE_FILE = join(ROOT, "docker-compose.demo.yml");
 const STARTED_AT = Date.now();
+
+// Per-phase timing for the v1.0 ≤5-min acceptance gate. Each step()
+// call closes the previous phase and opens a new one, so the final
+// summary shows where the wall-clock minute went (pull, boot, seed,
+// kickoff). Without this the buyer just sees a single "3m42s"
+// number with no way to diagnose what regressed if a future change
+// pushes us over budget.
+interface Phase {
+  name: string;
+  startedAtMs: number;
+  endedAtMs?: number;
+}
+const phases: Phase[] = [];
+function startPhase(name: string): void {
+  const now = Date.now();
+  if (phases.length > 0) {
+    const prev = phases[phases.length - 1];
+    if (prev.endedAtMs === undefined) prev.endedAtMs = now;
+  }
+  phases.push({ name, startedAtMs: now });
+}
+function closeLastPhase(): void {
+  if (phases.length === 0) return;
+  const prev = phases[phases.length - 1];
+  if (prev.endedAtMs === undefined) prev.endedAtMs = Date.now();
+}
 
 const c = {
   green: (s: string) => `\x1b[32m${s}\x1b[0m`,
@@ -56,6 +89,13 @@ interface Flags {
   noOpen: boolean;
   rebuild: boolean;
   tag: string;
+  // Acceptance-gate plumbing. `budgetMs` is the v1.0 ≤5-min target;
+  // when set the script exits 3 (success-but-over-budget) so CI can
+  // distinguish a regression from a hard failure. `resultsFile` writes
+  // a structured JSON timing report that scripts/aisoc-acceptance.ts
+  // consumes for nightly regression tracking.
+  budgetMs: number | null;
+  resultsFile: string | null;
 }
 
 function parseFlags(argv: string[]): Flags {
@@ -64,6 +104,8 @@ function parseFlags(argv: string[]): Flags {
     noOpen: false,
     rebuild: false,
     tag: "latest",
+    budgetMs: null,
+    resultsFile: null,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -71,6 +113,13 @@ function parseFlags(argv: string[]): Flags {
     else if (a === "--no-open") flags.noOpen = true;
     else if (a === "--rebuild") flags.rebuild = true;
     else if (a === "--tag") flags.tag = argv[++i] ?? "latest";
+    else if (a === "--budget-ms") {
+      const raw = argv[++i];
+      const n = raw ? Number.parseInt(raw, 10) : Number.NaN;
+      flags.budgetMs = Number.isFinite(n) && n > 0 ? n : null;
+    } else if (a === "--results-file") {
+      flags.resultsFile = argv[++i] ?? null;
+    }
   }
   return flags;
 }
@@ -86,6 +135,16 @@ function log(msg: string) {
 }
 
 function step(n: number, total: number, msg: string) {
+  // Every visible step doubles as a phase boundary for the timing
+  // report. The label uses the step msg (without the [n/total] prefix)
+  // so the JSON report reads naturally — "Pulling prebuilt images…"
+  // instead of "[2/7] Pulling…". We strip the parenthesized suffix
+  // some msgs include ("Skipping image pull (--rebuild)") so the
+  // canonical phase names stay stable between runs even when flags
+  // differ — the acceptance harness compares phase durations across
+  // runs and a label drift would break trend comparisons.
+  const cleanLabel = msg.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  startPhase(cleanLabel);
   console.log(`\n${c.bold(c.blue(`[${n}/${total}] ${msg}`))} ${c.dim(`(${elapsed()})`)}`);
 }
 
@@ -460,6 +519,109 @@ ${c.bold("Total elapsed:")} ${c.green(elapsed())}
 `);
 }
 
+// ---------- Acceptance-gate reporting ----------
+
+function formatMs(ms: number): string {
+  const total = Math.round(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return m > 0 ? `${m}m${String(s).padStart(2, "0")}s` : `${s}s`;
+}
+
+interface RunReport {
+  // ISO-8601 wall-clock so nightly runs stay sortable in a JSON ledger.
+  finishedAt: string;
+  totalMs: number;
+  totalLabel: string;
+  budgetMs: number | null;
+  withinBudget: boolean | null;
+  showcaseCaseFound: boolean;
+  investigationKickedOff: boolean;
+  flags: {
+    rebuild: boolean;
+    noPull: boolean;
+    noOpen: boolean;
+    tag: string;
+  };
+  phases: Array<{ name: string; durationMs: number; label: string }>;
+}
+
+function buildReport(
+  flags: Flags,
+  showcaseCaseFound: boolean,
+  investigationKickedOff: boolean,
+): RunReport {
+  closeLastPhase();
+  const totalMs = Date.now() - STARTED_AT;
+  return {
+    finishedAt: new Date().toISOString(),
+    totalMs,
+    totalLabel: formatMs(totalMs),
+    budgetMs: flags.budgetMs,
+    withinBudget: flags.budgetMs === null ? null : totalMs <= flags.budgetMs,
+    showcaseCaseFound,
+    investigationKickedOff,
+    flags: {
+      rebuild: flags.rebuild,
+      noPull: flags.noPull,
+      noOpen: flags.noOpen,
+      tag: flags.tag,
+    },
+    phases: phases.map((p) => {
+      const end = p.endedAtMs ?? Date.now();
+      const dur = end - p.startedAtMs;
+      return { name: p.name, durationMs: dur, label: formatMs(dur) };
+    }),
+  };
+}
+
+function printPhaseTable(report: RunReport): void {
+  // ASCII table — readable by humans in CI logs and screenshot-friendly
+  // for "yes, the demo really did boot in 3m20s" buyer-facing benchmarks.
+  // Plain spaces (no Unicode box drawing) to stay terminal-portable.
+  console.log(c.bold("Phase breakdown"));
+  const rows = report.phases.map((p) => [p.name, p.label, `${p.durationMs}ms`]);
+  const headers = ["Phase", "Duration", "ms"];
+  const all = [headers, ...rows];
+  const widths = headers.map((_, i) =>
+    Math.max(...all.map((row) => row[i].length)),
+  );
+  const fmt = (row: string[]) =>
+    "  " + row.map((cell, i) => cell.padEnd(widths[i])).join("  ");
+  console.log(c.dim(fmt(headers)));
+  console.log(c.dim("  " + widths.map((w) => "-".repeat(w)).join("  ")));
+  for (const row of rows) console.log(fmt(row));
+  console.log(
+    `\n  ${c.bold("Total:")} ${c.green(report.totalLabel)} (${report.totalMs}ms)`,
+  );
+  if (report.budgetMs !== null) {
+    const budgetLabel = formatMs(report.budgetMs);
+    if (report.withinBudget) {
+      console.log(
+        `  ${c.bold("Budget:")} ${c.green(`PASS — under ${budgetLabel}`)} ` +
+          c.dim(`(${report.budgetMs - report.totalMs}ms headroom)`),
+      );
+    } else {
+      console.log(
+        `  ${c.bold("Budget:")} ${c.red(`FAIL — exceeded ${budgetLabel} by ${formatMs(report.totalMs - report.budgetMs)}`)} ` +
+          c.dim("(WS-A acceptance regression)"),
+      );
+    }
+  }
+}
+
+function emitReport(flags: Flags, report: RunReport): void {
+  if (!flags.resultsFile) return;
+  try {
+    writeFileSync(flags.resultsFile, JSON.stringify(report, null, 2) + "\n");
+    console.log(c.dim(`  results JSON written to ${flags.resultsFile}`));
+  } catch (e: any) {
+    console.error(
+      c.yellow(`  failed to write results to ${flags.resultsFile}: ${e?.message ?? e}`),
+    );
+  }
+}
+
 // ---------- Main ----------
 
 async function main() {
@@ -467,7 +629,10 @@ async function main() {
 
   console.log(
     c.bold("AiSOC Demo") +
-      c.dim(` — tag=${flags.tag}${flags.rebuild ? " · rebuild" : ""}`),
+      c.dim(
+        ` — tag=${flags.tag}${flags.rebuild ? " · rebuild" : ""}` +
+          (flags.budgetMs ? ` · budget=${formatMs(flags.budgetMs)}` : ""),
+      ),
   );
 
   if (!checkDocker()) process.exit(1);
@@ -481,10 +646,31 @@ async function main() {
     console.error(c.yellow("seed step had issues; continuing"));
   }
   const seededCase = await findSeededCase();
+  // We track these for the run report so the acceptance harness can
+  // distinguish "stack came up but no case showed" (a seed regression)
+  // from "everything booted but the LLM call failed" (a flaky live LLM).
+  let investigationKickedOff = false;
   if (seededCase) {
-    await kickoffInvestigation(seededCase.id);
+    investigationKickedOff = await kickoffInvestigation(seededCase.id);
   }
   await openInBrowser(seededCase, flags);
+
+  // Reporting runs after openInBrowser so the cheerful "demo is up"
+  // banner stays at the top of the user's eyeline. The phase table
+  // and budget verdict come immediately after — for a `pnpm aisoc:demo`
+  // user without --budget-ms it's just a nice-to-have timing breakdown;
+  // for the acceptance harness it's the gate.
+  console.log("");
+  const report = buildReport(flags, seededCase !== null, investigationKickedOff);
+  printPhaseTable(report);
+  emitReport(flags, report);
+
+  if (flags.budgetMs !== null && !report.withinBudget) {
+    // Exit 3 (distinct from 1=hard-fail and 2=crash) so CI can label
+    // the run "regression" rather than "broken". The stack is left
+    // running so the human can poke at the slow step.
+    process.exit(3);
+  }
   process.exit(0);
 }
 

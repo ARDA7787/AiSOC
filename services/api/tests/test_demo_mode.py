@@ -5,9 +5,10 @@ These verify the gate behaves correctly in both modes:
 - When `AISOC_DEMO_MODE=False`, the middleware is transparent — every request
   flows through and responses do **not** carry demo headers.
 - When `AISOC_DEMO_MODE=True`, GET requests succeed and pick up the banner
-  headers, allowlisted writes (kickoff against `INC-001`, alert ack) succeed,
-  and arbitrary mutating writes return 403 with the `demo_mode_read_only`
-  error code.
+  headers, allowlisted writes (kickoff against the showcase `INC-RT-001`
+  ransomware case or any stock `INC-NNN` catalogue case, plus alert ack)
+  succeed, and arbitrary mutating writes return 403 with the
+  `demo_mode_read_only` error code.
 
 The middleware is the *only* thing under test; we mount it on a stub Starlette
 app so the test doesn't pull in the real DB / auth stack.
@@ -49,9 +50,9 @@ def app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
     def delete_case(case_id: str) -> dict[str, Any]:
         return {"deleted": case_id}
 
-    @app.post("/api/v1/cases/INC-001/investigate")
-    def investigate() -> dict[str, Any]:
-        return {"run_id": "demo-run-123"}
+    @app.post("/api/v1/cases/{case_number}/investigate")
+    def investigate(case_number: str) -> dict[str, Any]:
+        return {"run_id": "demo-run-123", "case_number": case_number}
 
     @app.post("/api/v1/alerts/{alert_id}/ack")
     def ack(alert_id: str) -> dict[str, Any]:
@@ -118,12 +119,40 @@ def test_arbitrary_delete_is_blocked_with_403(app: FastAPI) -> None:
 
 
 def test_canonical_investigation_kickoff_is_allowed(app: FastAPI) -> None:
-    """The canned demo flow must work end-to-end."""
+    """The canned demo flow must work end-to-end against the showcase case.
+
+    The README "Try Demo" CTA deeplinks to ``/cases/INC-RT-001?tab=ledger`` —
+    the in-flight LockBit 3.0 ransomware investigation — so kicking off a
+    fresh agent run there must succeed under the demo-mode gate.
+    """
     client = TestClient(app)
-    r = client.post("/api/v1/cases/INC-001/investigate")
+    r = client.post("/api/v1/cases/INC-RT-001/investigate")
     assert r.status_code == 200
-    assert r.json() == {"run_id": "demo-run-123"}
+    body = r.json()
+    assert body["run_id"] == "demo-run-123"
+    assert body["case_number"] == "INC-RT-001"
     assert r.headers["X-AiSOC-Demo"] == "true"
+
+
+def test_stock_catalogue_investigation_kickoff_is_allowed(app: FastAPI) -> None:
+    """Stock catalogue cases (INC-001 … INC-014) must also be investigatable.
+
+    Visitors who navigate the case list will click into other seeded
+    incidents; the demo-mode gate must let them kick off agent runs there
+    without a 403.
+    """
+    client = TestClient(app)
+    r = client.post("/api/v1/cases/INC-007/investigate")
+    assert r.status_code == 200
+    assert r.json()["case_number"] == "INC-007"
+
+
+def test_unseeded_case_kickoff_is_blocked(app: FastAPI) -> None:
+    """A made-up case ID must NOT bypass the gate — only seeded shapes do."""
+    client = TestClient(app)
+    r = client.post("/api/v1/cases/EVIL-CASE/investigate")
+    assert r.status_code == 403
+    assert r.json()["error"] == "demo_mode_read_only"
 
 
 def test_alert_acknowledge_is_allowed(app: FastAPI) -> None:

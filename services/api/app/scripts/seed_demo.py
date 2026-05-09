@@ -1273,8 +1273,9 @@ def _make_case(tenant_id: uuid.UUID, idx: int, when: datetime, alert_ids: list[u
         weights=[30, 35, 10, 15, 10],
     )[0]
     techniques = _pick_techniques(2)
-    # Human-readable identifier — keep in sync with the demo deeplinks the
-    # marketing site and product walkthroughs use (e.g. /cases/INC-001).
+    # Human-readable identifier for the stock catalogue (INC-001, INC-002, …).
+    # The hot showcase deeplink (/cases/INC-RT-001?tab=ledger) targets the
+    # in-flight LockBit 3.0 ransomware investigation seeded separately above.
     return Case(
         tenant_id=tenant_id,
         case_number=f"INC-{idx + 1:03d}",

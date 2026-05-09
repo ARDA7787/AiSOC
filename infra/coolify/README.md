@@ -75,8 +75,11 @@ POSTGRES_PASSWORD=<click Generate>
 # Public URLs — replace with your domain
 NEXT_PUBLIC_API_URL=https://api.aisoc.example.com
 NEXT_PUBLIC_WS_URL=wss://realtime.aisoc.example.com
-NEXT_PUBLIC_AISOC_DEMO_MODE=true
-NEXT_PUBLIC_AISOC_DEMO_DEEPLINK=/cases/INC-001?tab=ledger
+NEXT_PUBLIC_DEMO_MODE=true
+NEXT_PUBLIC_DEMO_DEEPLINK=/cases/INC-RT-001?tab=ledger
+NEXT_PUBLIC_DEMO_BANNER=Demo data resets daily. All write actions are disabled.
+NEXT_PUBLIC_DEMO_AUTOLOGIN_EMAIL=demo@aisoc.dev
+NEXT_PUBLIC_DEMO_AUTOLOGIN_PASSWORD=aisoc-demo
 ```
 
 Optional (only if you want LLM-backed agents instead of the
@@ -116,15 +119,23 @@ First deploy takes ~10-15 minutes (Docker image pulls + first build).
 
 ### Step 6: Pre-warm the demo
 
-SSH into the VPS and run the seed inside the api container:
+The api container's entrypoint runs `alembic upgrade head && python -m
+app.scripts.seed_demo` on every start, so the demo tenant — including
+the in-flight LockBit 3.0 ransomware investigation `INC-RT-001` — is
+present before the service accepts traffic. The seeder is idempotent:
+re-running against an already-seeded database is a cheap no-op that
+refreshes the canonical 15 incidents.
+
+If you ever need to re-seed manually, SSH into the VPS and run:
 
 ```bash
 docker exec -it $(docker ps -qf "name=aisoc-api") \
-  python scripts/demo_seed.py --reset --kickoff-investigation
+  python -m app.scripts.seed_demo
 ```
 
-Open `https://web.aisoc.example.com` — demo banner shows, deeplink
-lands on a pre-seeded incident.
+Open `https://web.aisoc.example.com` — the onboarding hero loads with
+the demo banner primed, and the **Try Demo** CTA deep-links to
+`/cases/INC-RT-001?tab=ledger`.
 
 ## Disabling optional services
 
@@ -152,7 +163,7 @@ disabled storage tier.
 Coolify has scheduled tasks built in. To rotate the demo daily:
 
 1. Project → **+ New Resource** → **Service** → **Schedule**.
-2. **Command**: `docker exec aisoc-api python scripts/demo_seed.py --reset --kickoff-investigation`
+2. **Command**: `docker exec aisoc-api python -m app.scripts.seed_demo`
 3. **Cron**: `0 0 * * *` (daily at 00:00 UTC).
 4. **Save**.
 
@@ -214,7 +225,7 @@ settings → **Network**.
 
 ### Web service shows "demo banner" but deeplink doesn't work
 
-Run the seed (Step 6 above) — if it never executed, INC-001 doesn't
+Run the seed (Step 6 above) — if it never executed, `INC-RT-001` doesn't
 exist in Postgres yet, so the deeplink 404s. The seed is *not*
 auto-triggered on Coolify the way it is on the Fly demo.
 

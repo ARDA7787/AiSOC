@@ -1,11 +1,12 @@
 -- Migration 028: Human-readable case identifiers on aisoc_cases
 --
--- The web console (and a number of demo deeplinks like /cases/INC-001) needs to
--- look up a case by a stable, short, human-readable identifier — not a UUID.
--- The ORM `cases` table already has a `case_number` column (e.g. CASE-1042),
--- but the canonical demo table `aisoc_cases` does not.  Adding it here lets
--- the API resolve `/api/v1/cases/INC-001` against `case_number` while still
--- accepting raw UUIDs, without breaking any existing rows.
+-- The web console (and demo deeplinks like /cases/INC-RT-001 or /cases/INC-007)
+-- need to look up a case by a stable, short, human-readable identifier — not a
+-- UUID. The ORM `cases` table already has a `case_number` column (e.g.
+-- CASE-1042), but the canonical demo table `aisoc_cases` does not.  Adding it
+-- here lets the API resolve `/api/v1/cases/INC-RT-001` (or any `INC-NNN` from
+-- the seeded catalogue) against `case_number` while still accepting raw UUIDs,
+-- without breaking any existing rows.
 
 ALTER TABLE aisoc_cases
     ADD COLUMN IF NOT EXISTS case_number TEXT;

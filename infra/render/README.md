@@ -77,16 +77,19 @@ gh repo view --web
 
 ## Post-deploy: pre-warm the demo
 
-Render doesn't have an equivalent of Fly's `flyctl ssh console -C` for
-running one-shot commands, but the demo seeds itself the first time a
-visitor lands on the api (`scripts/demo_seed.py` runs on startup if the
-demo tenant is empty). For a faster cold start:
+The blueprint wires `preDeployCommand: alembic upgrade head && python -m
+app.scripts.seed_demo` onto the `aisoc-api` service, so every Render deploy
+runs migrations and seeds the demo tenant before the new instance accepts
+traffic. The seeder is idempotent — re-running against an already-seeded
+database is a cheap no-op that refreshes `INC-RT-001` (the in-flight
+LockBit 3.0 ransomware investigation the demo deeplink targets) plus the
+14 other canonical incidents.
+
+If you ever need to re-seed manually (e.g. local recovery, or after a
+database reset), use Render's Shell tab on the `aisoc-api` service and run:
 
 ```bash
-# From your local machine, point the seed script at the deployed api:
-CORE_API_URL=https://aisoc-api-<hash>.onrender.com \
-AGENTS_API_URL=https://aisoc-agents-<hash>.onrender.com \
-  python scripts/demo_seed.py --reset --kickoff-investigation
+python -m app.scripts.seed_demo
 ```
 
 ## Daily reset (optional)

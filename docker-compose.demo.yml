@@ -260,6 +260,20 @@ services:
         API_URL: http://api:8000
         AGENTS_URL: http://agents:8084
         REALTIME_URL: http://realtime:4000
+        # NEXT_PUBLIC_* values are inlined as string literals into the client
+        # bundle at `next build` time, so the local demo experience (banner,
+        # auto-login, deeplink routing) requires baking them in here. Without
+        # these the bundle ships with empty strings and `isDemoMode()` returns
+        # false → no banner, no auto-login, visitor gets bounced to /login on
+        # first navigation. Mirrors the prod hosted defaults in
+        # apps/web/Dockerfile so `pnpm aisoc:demo --rebuild` produces an image
+        # behaviourally identical to the published ghcr.io/beenuar/aisoc-web
+        # image used by the no-flag default flow.
+        NEXT_PUBLIC_DEMO_MODE: "true"
+        NEXT_PUBLIC_DEMO_DEEPLINK: "/cases/INC-RT-001?tab=ledger"
+        NEXT_PUBLIC_DEMO_BANNER: "Demo data resets daily at 00:00 UTC. All write actions are disabled."
+        NEXT_PUBLIC_DEMO_AUTOLOGIN_EMAIL: "demo@aisoc.dev"
+        NEXT_PUBLIC_DEMO_AUTOLOGIN_PASSWORD: "aisoc-demo"
     container_name: aisoc-demo-web
     pull_policy: missing
     depends_on:

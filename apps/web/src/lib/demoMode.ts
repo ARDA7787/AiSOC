@@ -6,7 +6,7 @@
  *
  *   - `isDemoMode()`            → true when the deployment is the hosted demo
  *   - `demoBannerMessage()`     → the banner copy to render at the top of every page
- *   - `demoDeeplink()`          → the `/cases/INC-001?tab=ledger` deeplink the
+ *   - `demoDeeplink()`          → the `/cases/INC-RT-001?tab=ledger` deeplink the
  *                                 README "Live Demo" button targets, so we land
  *                                 visitors on a hot, mid-investigation view
  *

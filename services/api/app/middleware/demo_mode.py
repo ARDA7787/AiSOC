@@ -49,8 +49,10 @@ _ALWAYS_ALLOWED_PREFIXES: tuple[str, ...] = (
 # In demo mode these *write* endpoints still work — needed for the canned
 # "click → see investigation" experience to function.
 _DEMO_WRITE_ALLOWLIST: tuple[re.Pattern[str], ...] = (
-    # The seed pre-warms a run, but visitors can still kick off their own.
-    re.compile(r"^/api/v1/cases/INC-001/investigate$"),
+    # The seed pre-warms a run on INC-RT-001 (the canonical LockBit 3.0
+    # showcase) and seeds the stock catalogue INC-001…INC-014. Visitors can
+    # kick off investigations against any of them — match the seeded ID shape.
+    re.compile(r"^/api/v1/cases/INC(?:-RT)?-\d{3}/investigate$"),
     re.compile(r"^/api/v1/investigations/[^/]+/cancel$"),
     # Acknowledgement is local-state-only on the visitor's view.
     re.compile(r"^/api/v1/alerts/[^/]+/ack$"),

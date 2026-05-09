@@ -126,9 +126,11 @@ NODE_ENV=production
 PORT=3000
 NEXT_PUBLIC_API_URL=https://${{ api.RAILWAY_PUBLIC_DOMAIN }}
 NEXT_PUBLIC_WS_URL=wss://${{ realtime.RAILWAY_PUBLIC_DOMAIN }}
-NEXT_PUBLIC_AISOC_DEMO_MODE=true
-NEXT_PUBLIC_AISOC_DEMO_DEEPLINK=/cases/INC-001?tab=ledger
-NEXT_PUBLIC_AISOC_DEMO_BANNER=Demo data resets daily. All write actions are disabled.
+NEXT_PUBLIC_DEMO_MODE=true
+NEXT_PUBLIC_DEMO_DEEPLINK=/cases/INC-RT-001?tab=ledger
+NEXT_PUBLIC_DEMO_BANNER=Demo data resets daily. All write actions are disabled.
+NEXT_PUBLIC_DEMO_AUTOLOGIN_EMAIL=demo@aisoc.dev
+NEXT_PUBLIC_DEMO_AUTOLOGIN_PASSWORD=aisoc-demo
 ```
 
 5. **Settings** → **Networking** → **Generate Domain**.
@@ -137,15 +139,23 @@ NEXT_PUBLIC_AISOC_DEMO_BANNER=Demo data resets daily. All write actions are disa
 
 ### Step 6: Pre-warm the demo
 
+The api service runs `alembic upgrade head && python -m
+app.scripts.seed_demo` on every deploy via Railway's `releaseCommand`,
+so the canonical 15 incidents (including the in-flight LockBit 3.0
+ransomware investigation `INC-RT-001`) are present before the new
+instance accepts traffic. The seeder is idempotent — re-running against
+an already-seeded database is a cheap no-op.
+
+If you ever need to re-seed manually, open the api service's shell in
+Railway and run:
+
 ```bash
-# From your local machine:
-CORE_API_URL=https://api-<hash>.up.railway.app \
-AGENTS_API_URL=https://agents-<hash>.up.railway.app \
-  python scripts/demo_seed.py --reset --kickoff-investigation
+python -m app.scripts.seed_demo
 ```
 
-Open the web service's URL — you should land on the demo banner with the
-INC-001 deeplink primed.
+Open the web service's URL — you should land on the onboarding hero with
+the demo banner primed and the **Try Demo** CTA deep-linking to
+`/cases/INC-RT-001?tab=ledger`.
 
 ## Why this isn't a one-click experience
 
@@ -171,7 +181,7 @@ the demo daily, add a 5th service running the seed script:
 # In a copy of railway.toml under a new service "demo-seed":
 [deploy]
 cronSchedule = "0 0 * * *"  # daily at 00:00 UTC
-startCommand = "python scripts/demo_seed.py --reset --kickoff-investigation"
+startCommand = "python -m app.scripts.seed_demo"
 ```
 
 Or skip it for personal evaluation deploys.
