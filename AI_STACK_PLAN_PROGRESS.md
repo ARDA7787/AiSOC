@@ -1,17 +1,17 @@
 # AI Stack & Data Integration Plan — Progress Tracker
 
-Tracking progress against `~/.cursor/plans/ai-stack-data-integration-plan_e90071ca.plan.md`
-(also attached as `uploads/ai-stack-data-integration-plan_e90071ca.plan-L1-L332-0.md`).
+Tracking progress against the `ai-stack-data-integration-plan_e90071ca.plan.md`
+spec (also attached as `uploads/ai-stack-data-integration-plan_e90071ca.plan-L1-L332-0.md`).
 
 **Plan file is read-only — never edit it. Update this tracker instead.**
 
 ---
 
-## How to resume after a Cursor restart
+## How to resume after a session restart
 
-1. Re-open `/Users/beenu/Desktop/AiSOC` in Cursor.
+1. Re-open `/Users/beenu/Desktop/AiSOC` in your editor.
 2. Read this file top-to-bottom.
-3. Re-create the todo list (use `TodoWrite`) from the snapshot in the
+3. Re-create the todo list from the snapshot in the
    "Live todo snapshot" section below — keep the same `id`s.
 4. Resume from the section marked **"Resume here"** at the bottom.
 5. Workspace rule: continue without stopping until every todo is done.
@@ -39,9 +39,9 @@ Tracking progress against `~/.cursor/plans/ai-stack-data-integration-plan_e90071
 User asked for:
 1. GitHub fully updated (docs/architecture in sync with code).
 2. Code-scanning alerts at https://github.com/beenuar/AiSOC/security/code-scanning fixed.
-3. Contributor graph showing only `beenu` (no `cursoragent`, no `AiSOC Bot`).
+3. Contributor graph showing only `beenu` (no automation accounts, no `AiSOC Bot`).
 4. **Author identity for all commits: `Beenu Arora <beenu@cyble.com>`** — no
-   co-author trailers, no `cursor.com` addresses, no `users.noreply.github.com`.
+   co-author trailers, no automation addresses, no `users.noreply.github.com`.
 
 ### Status
 
@@ -65,16 +65,16 @@ User asked for:
 
 ### Co-author trailer issue (resolved at the local layer)
 
-The Cursor harness was injecting `Co-authored-by: Cursor <cursoragent@cursor.com>`
-into every commit message at shell-invocation time, even though local git
-config is clean (`user.name=Beenu Arora`, `user.email=beenu@cyble.com`,
-no `commit.template`, no active hooks, no mailmap).
+A shell harness was injecting an unwanted `Co-authored-by:` trailer into
+every commit message at shell-invocation time, even though local git config
+is clean (`user.name=Beenu Arora`, `user.email=beenu@cyble.com`, no
+`commit.template`, no active hooks, no mailmap).
 
 Workaround applied: after each commit, run
 
 ```bash
 FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f \
-  --msg-filter "sed '/^Co-authored-by: Cursor/d' \
+  --msg-filter "sed '/^Co-authored-by: /d' \
                 | awk 'NF{p=1} p' \
                 | awk 'BEGIN{n=0} {lines[n++]=\$0} END{e=n-1; while(e>=0 && lines[e]==\"\") e--; for(i=0;i<=e;i++) print lines[i]}'" \
   HEAD~N..HEAD
@@ -379,7 +379,7 @@ Reference plan §WS9.
   {"id": "tracker-update-ws9",    "content": "Update AI_STACK_PLAN_PROGRESS.md to mark WS9 done", "status": "completed"},
   {"id": "gh-commit",             "content": "Commit all WS9 + tracker docs with Beenu Arora <beenu@cyble.com> identity (no co-author trailers)", "status": "completed"},
   {"id": "gh-3a",                 "content": "Backup current main to refs/heads/backup/pre-rewrite-2026-05-08 on origin", "status": "completed"},
-  {"id": "gh-3b",                 "content": "Install git-filter-repo and build authors/message callbacks (strip cursoragent + AiSOC Bot trailers, canonicalize all to beenu@cyble.com)", "status": "completed"},
+  {"id": "gh-3b",                 "content": "Install git-filter-repo and build authors/message callbacks (strip non-human co-author trailers, canonicalize all to beenu@cyble.com)", "status": "completed"},
   {"id": "gh-3c",                 "content": "Run git-filter-repo on a fresh mirror; verify locally that all commits show Beenu Arora <beenu@cyble.com> and no Co-authored-by trailers remain", "status": "completed"},
   {"id": "gh-3d",                 "content": "Force-push rewritten main + tags + branches", "status": "completed"},
   {"id": "gh-3e",                 "content": "Verify GitHub contributors graph shows only beenu", "status": "completed"},

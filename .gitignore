@@ -45,7 +45,6 @@ htmlcov/
 .vscode/
 *.swp
 *.swo
-.cursor/hooks/state/
 
 # Go test/build binaries inside plugins
 plugins/**/*-build-test
