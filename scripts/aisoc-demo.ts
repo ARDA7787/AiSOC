@@ -303,7 +303,17 @@ async function waitForHealth(): Promise<boolean> {
 }
 
 function seedData(): boolean {
-  step(5, 7, "Seeding canonical demo data");
+  step(5, 7, "Ensuring canonical demo data is seeded");
+  // The `seed` service in docker-compose.demo.yml runs `python -m
+  // app.scripts.seed_demo` automatically once the api healthcheck passes
+  // and then exits. We re-run it here as a safety net for two cases:
+  //   - the seed container failed silently (network blip pulling the
+  //     image, postgres took longer than the seed's healthcheck-wait, …)
+  //   - the user previously ran `docker compose down` without `-v`, so the
+  //     postgres volume survived but the seeder isn't going to fire again
+  //     because the api is already considered healthy on the next `up`.
+  // Idempotency is enforced inside seed_demo.py — repeated runs are a
+  // no-op as long as INC-RT-001 etc. already exist.
   const code = runStream("docker", [
     "compose",
     "-f",
@@ -318,7 +328,7 @@ function seedData(): boolean {
   if (code !== 0) {
     console.error(
       c.yellow(
-        "seed script returned non-zero. The stack may already be seeded; continuing.",
+        "seed re-run returned non-zero. The stack is likely already seeded by the one-shot `seed` container; continuing.",
       ),
     );
   }
@@ -326,6 +336,7 @@ function seedData(): boolean {
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SHOWCASE_CASE_NUMBER = "INC-RT-001";
 
 function sanitizeCaseId(id: unknown): string | null {
   if (typeof id === "string" && UUID_RE.test(id)) return id;
@@ -333,20 +344,42 @@ function sanitizeCaseId(id: unknown): string | null {
 }
 
 async function findSeededCase(): Promise<{ id: string; case_number: string; title: string } | null> {
-  step(6, 7, "Locating a seeded case");
+  step(6, 7, "Locating the showcase ransomware investigation");
   // The dev-mode auth bypass returns the demo user/tenant for unauthenticated
   // requests when ENV=development, so we can hit /v1/cases without a token.
+  //
+  // We specifically look for INC-RT-001 — the in-flight LockBit 3.0 case
+  // that seed_demo.py builds with a running PlaybookRun, an investigation
+  // already mid-stream, and decision-graph artifacts. That's the case the
+  // onboarding deeplink (NEXT_PUBLIC_DEMO_DEEPLINK=/cases/INC-RT-001?tab=
+  // ledger) targets. If it's missing we fall back to the first case in the
+  // list, but log a warning because the demo UX assumes the showcase case
+  // is present.
   for (let attempt = 0; attempt < 30; attempt++) {
-    const res = await fetchJson("http://localhost:8000/v1/cases?page_size=5", 4000);
+    // Pull the full first page (default page_size on the API is plenty
+    // larger than the seed's ~16 cases). Filtering server-side by
+    // case_number would be cleaner but the cases list endpoint doesn't
+    // currently expose that filter, and the volume is trivially small.
+    const res = await fetchJson("http://localhost:8000/v1/cases?page_size=50", 4000);
     if (res && Array.isArray(res.items) && res.items.length > 0) {
-      const c0 = res.items[0];
-      const safeId = sanitizeCaseId(c0.id);
+      const showcase = res.items.find(
+        (item: any) => item.case_number === SHOWCASE_CASE_NUMBER,
+      );
+      const target = showcase ?? res.items[0];
+      const safeId = sanitizeCaseId(target.id);
       if (!safeId) {
         log(c.yellow("warn") + " API returned a non-UUID case ID — skipping");
         return null;
       }
-      log(c.green("ok") + ` found case ${c0.case_number} (${safeId})`);
-      return { id: safeId, case_number: c0.case_number, title: c0.title };
+      if (showcase) {
+        log(c.green("ok") + ` found showcase ${target.case_number} (${safeId})`);
+      } else {
+        log(
+          c.yellow("warn") +
+            ` ${SHOWCASE_CASE_NUMBER} not found; falling back to ${target.case_number}`,
+        );
+      }
+      return { id: safeId, case_number: target.case_number, title: target.title };
     }
     await new Promise((r) => setTimeout(r, 2000));
   }
