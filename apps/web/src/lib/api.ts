@@ -1753,7 +1753,104 @@ export const agentsApi = {
       body: JSON.stringify({ alertId }),
       signal,
     }),
+
+  /**
+   * Stream a structured "Explain this alert" walkthrough as NDJSON.
+   *
+   * Each line in `response.body` is one {@link ExplainStreamFrame}.
+   * Returns the raw `Response` because the drawer renders frames as
+   * they arrive — see `ExplainDrawer.tsx` for the consumer.
+   */
+  explainStream: (
+    payload: { alert: Record<string, unknown>; alertId?: string },
+    signal?: AbortSignal,
+  ) =>
+    fetch(`${AGENTS_BASE}/api/v1/explain`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Tenant-Id': TENANT_ID,
+      },
+      body: JSON.stringify({
+        alert: payload.alert,
+        alert_id: payload.alertId,
+        tenant_id: TENANT_ID,
+      }),
+      signal,
+    }),
 };
+
+// ─── Explain endpoint frames ─────────────────────────────────────────────────
+//
+// One frame per NDJSON line. The drawer routes each frame by `kind` and
+// appends to the matching section, so order matters: `section` opens a
+// section, subsequent typed frames fill it, and `done` closes the stream.
+
+export interface ExplainSectionFrame {
+  kind: 'section';
+  id: 'summary' | 'ocsf' | 'mitre' | 'evidence' | 'next';
+  title: string;
+}
+
+export interface ExplainDeltaFrame {
+  kind: 'delta';
+  section: 'summary';
+  text: string;
+}
+
+export interface ExplainOcsfFrame {
+  kind: 'ocsf';
+  category: string;
+  category_uid: number;
+  class: string;
+  class_uid: number;
+  activity: string;
+  fields: Record<string, unknown>;
+}
+
+export interface ExplainMitreFrame {
+  kind: 'mitre';
+  id: string;
+  name: string;
+  tactic_names: string[];
+  description: string;
+  url: string;
+  found: boolean;
+}
+
+export interface ExplainEvidenceFrame {
+  kind: 'evidence';
+  label: string;
+  value: string;
+  annotation: string;
+}
+
+export interface ExplainNextStepFrame {
+  kind: 'next_step';
+  title: string;
+  rationale: string;
+  playbook_id: string | null;
+}
+
+export interface ExplainDoneFrame {
+  kind: 'done';
+  alert_id: string;
+}
+
+export interface ExplainErrorFrame {
+  kind: 'error';
+  error: string;
+}
+
+export type ExplainStreamFrame =
+  | ExplainSectionFrame
+  | ExplainDeltaFrame
+  | ExplainOcsfFrame
+  | ExplainMitreFrame
+  | ExplainEvidenceFrame
+  | ExplainNextStepFrame
+  | ExplainDoneFrame
+  | ExplainErrorFrame;
 
 // ─── Hunt / Search ───────────────────────────────────────────────────────────
 

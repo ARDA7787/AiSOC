@@ -19,6 +19,7 @@ import {
 import { format } from 'date-fns';
 import { clsx } from 'clsx';
 import { ContextualActions } from '@/components/copilot/ContextualActions';
+import { ExplainDrawer } from '@/components/alerts/ExplainDrawer';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -823,6 +824,10 @@ function AnalystOverridePanel({
 export function AlertDetailView({ alertId }: { alertId: string }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'raw'>('overview');
   const [status, setStatus] = useState<Alert['status']>('new');
+  // Side drawer for the "Explain this alert" structured walkthrough
+  // (`POST /api/v1/explain`). Kept local to the detail view because it
+  // only makes sense while a single alert is on screen.
+  const [explainOpen, setExplainOpen] = useState(false);
 
   const { data: alert, isLoading, mutate } = useSWR(
     ['alert', alertId],
@@ -892,6 +897,34 @@ export function AlertDetailView({ alertId }: { alertId: string }) {
               <option key={key} value={key}>{cfg.label}</option>
             ))}
           </select>
+          {/*
+            Primary L1/L2 affordance: open the structured "What happened
+            and what should I do?" drawer. Placed in the header so it's
+            the first thing a triaging analyst sees, ahead of the heavier
+            Create Case action.
+          */}
+          <button
+            type="button"
+            onClick={() => setExplainOpen(true)}
+            className="bg-purple-600/90 hover:bg-purple-500 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1.5"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 2a7 7 0 0 0-4 12.74V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.26A7 7 0 0 0 12 2z" />
+              <line x1="9" y1="22" x2="15" y2="22" />
+            </svg>
+            Explain
+          </button>
           <button className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition-colors">
             Create Case
           </button>
@@ -1053,6 +1086,21 @@ export function AlertDetailView({ alertId }: { alertId: string }) {
           </pre>
         </Section>
       )}
+
+      {/*
+        Explain drawer is mounted at the root of the detail view so it
+        can overlay tabs without unmounting on tab switch. It only fires
+        a network call when `open` flips true (see useEffect inside).
+      */}
+      <ExplainDrawer
+        open={explainOpen}
+        onClose={() => setExplainOpen(false)}
+        alert={alert}
+        onRunPlaybook={(pid) => {
+          toast.success(`Queued playbook ${pid}`);
+          setExplainOpen(false);
+        }}
+      />
     </div>
   );
 }
