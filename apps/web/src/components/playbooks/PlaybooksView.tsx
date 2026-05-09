@@ -9,107 +9,16 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
-import useSWR, { mutate } from 'swr';
+import useSWR from 'swr';
 import clsx from 'clsx';
 import type { Playbook, PlaybookRun } from './types';
+import { PlaybooksGallery } from './PlaybooksGallery';
 
 const fetcher = (url: string) =>
   fetch(url).then((r) => {
     if (!r.ok) throw new Error('Failed to fetch');
     return r.json();
   });
-
-/* ─────────────────────────── Chips ─────────────────────────── */
-
-const TRIGGER_COLORS: Record<string, string> = {
-  alert:    'bg-red-900/40 text-red-300 border-red-800',
-  case:     'bg-blue-900/40 text-blue-300 border-blue-800',
-  manual:   'bg-gray-800 text-gray-400 border-gray-700',
-  schedule: 'bg-purple-900/40 text-purple-300 border-purple-800',
-};
-
-function TriggerChip({ on }: { on: string }) {
-  return (
-    <span className={`text-xs px-2 py-0.5 rounded border ${TRIGGER_COLORS[on] ?? 'bg-gray-800 text-gray-400 border-gray-700'}`}>
-      {on}
-    </span>
-  );
-}
-
-/* ─────────────────────────── Enable Toggle ─────────────────────────── */
-
-function EnabledToggle({ playbook }: { playbook: Playbook }) {
-  const [loading, setLoading] = useState(false);
-  async function toggle() {
-    setLoading(true);
-    try {
-      await fetch(`/api/v1/playbooks/${playbook.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: !playbook.enabled }),
-      });
-      await mutate('/api/v1/playbooks');
-    } finally {
-      setLoading(false);
-    }
-  }
-  return (
-    <button
-      onClick={toggle}
-      disabled={loading}
-      title={playbook.enabled ? 'Enabled — click to disable' : 'Disabled — click to enable'}
-      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none disabled:opacity-50 ${
-        playbook.enabled ? 'bg-green-600' : 'bg-gray-700'
-      }`}
-    >
-      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${playbook.enabled ? 'translate-x-4' : 'translate-x-1'}`} />
-    </button>
-  );
-}
-
-/* ─────────────────────────── Run Button ─────────────────────────── */
-
-function RunButton({ playbook }: { playbook: Playbook }) {
-  const [status, setStatus] = useState<'idle' | 'running' | 'done' | 'err'>('idle');
-  async function run() {
-    setStatus('running');
-    try {
-      const res = await fetch(`/api/v1/playbooks/${playbook.id}/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ context: {}, dry_run: true }),
-      });
-      if (!res.ok) throw new Error();
-      setStatus('done');
-    } catch {
-      setStatus('err');
-    }
-    setTimeout(() => setStatus('idle'), 3000);
-  }
-  const label = { idle: 'Run', running: '…', done: 'OK', err: 'Err' }[status];
-  const color = {
-    idle:    'text-green-500 hover:text-green-400',
-    running: 'text-yellow-500',
-    done:    'text-green-400',
-    err:     'text-red-400',
-  }[status];
-  return (
-    <button
-      onClick={run}
-      disabled={status === 'running'}
-      title="Dry run"
-      className={`text-xs px-2.5 py-1 rounded border border-gray-700 transition-colors ${color}`}
-    >
-      {label}
-    </button>
-  );
-}
-
-async function deletePlaybook(id: string) {
-  if (!confirm('Delete this playbook?')) return;
-  await fetch(`/api/v1/playbooks/${id}`, { method: 'DELETE' });
-  await mutate('/api/v1/playbooks');
-}
 
 /* ─────────────────────────── Run History Tab ─────────────────────────── */
 
@@ -537,59 +446,7 @@ export function PlaybooksView() {
             </div>
           )}
 
-          {data && data.length > 0 && (
-            <div className="grid gap-3">
-              {data.map((pb) => (
-                <div
-                  key={pb.id}
-                  className={`bg-gray-900/60 border rounded-xl px-5 py-4 flex items-center gap-4 transition-colors ${
-                    pb.enabled ? 'border-gray-800 hover:border-gray-700' : 'border-gray-800/40 opacity-60'
-                  }`}
-                >
-                  <EnabledToggle playbook={pb} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Link
-                        href={`/playbooks/${pb.id}`}
-                        className="text-white font-medium hover:text-blue-300 transition-colors truncate"
-                      >
-                        {pb.name}
-                      </Link>
-                      <TriggerChip on={pb.trigger.on} />
-                      {pb.tags.slice(0, 3).map((tag) => (
-                        <span key={tag} className="text-xs px-1.5 py-0.5 rounded bg-gray-800 text-gray-500">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                    {pb.description && (
-                      <p className="text-sm text-gray-500 mt-0.5 truncate">{pb.description}</p>
-                    )}
-                    <div className="flex items-center gap-3 mt-1 text-xs text-gray-700">
-                      <span>{pb.steps.length} steps</span>
-                      <span>v{pb.version}</span>
-                      {pb.author && <span>by {pb.author}</span>}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <RunButton playbook={pb} />
-                    <Link
-                      href={`/playbooks/${pb.id}`}
-                      className="text-xs px-2.5 py-1 rounded border border-gray-700 text-gray-400 hover:text-gray-200 hover:border-gray-600 transition-colors"
-                    >
-                      Edit
-                    </Link>
-                    <button
-                      onClick={() => deletePlaybook(pb.id)}
-                      className="text-xs px-2.5 py-1 rounded border border-gray-800 text-gray-600 hover:text-red-400 hover:border-red-900 transition-colors"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {data && data.length > 0 && <PlaybooksGallery playbooks={data} />}
         </>
       )}
     </div>
