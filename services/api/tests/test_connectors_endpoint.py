@@ -73,8 +73,12 @@ async def test_fetch_catalog_returns_schemas() -> None:
 
 
 @pytest.mark.asyncio
-async def test_fetch_catalog_raises_503_when_unreachable() -> None:
-    """If the connectors service is down, surface 503 — not 500."""
+async def test_fetch_catalog_falls_back_when_service_unreachable() -> None:
+    """If the connectors microservice is down, the API serves the bundled
+    catalog from the image. Single-tenant / demo deploys frequently run
+    without a dedicated connectors service, so a transient network blip
+    must not blow up listing the catalog. We only raise 503 if the
+    bundled fallback is *also* empty (handled by the next test)."""
     client_instance = MagicMock()
     client_instance.get = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
     client_cm = MagicMock()
@@ -83,6 +87,36 @@ async def test_fetch_catalog_raises_503_when_unreachable() -> None:
     with patch(
         "app.api.v1.endpoints.connectors.httpx.AsyncClient",
         return_value=client_cm,
+    ):
+        result = await _fetch_catalog()
+    # The bundled catalog ships with at least one connector schema; we
+    # don't pin a specific count because that's churned by the marketplace
+    # sync. The contract is "non-empty list of schemas" — that's enough
+    # for the API surface to keep serving.
+    assert isinstance(result, list)
+    assert result, "expected bundled fallback catalog to be non-empty"
+
+
+@pytest.mark.asyncio
+async def test_fetch_catalog_raises_503_when_unreachable_and_no_fallback() -> None:
+    """If the service is down AND the bundled fallback is empty, surface
+    503 rather than returning an empty catalog (which would silently
+    break the connectors UI). We patch the fallback loader to simulate a
+    deploy that shipped without bundled schemas."""
+    client_instance = MagicMock()
+    client_instance.get = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
+    client_cm = MagicMock()
+    client_cm.__aenter__ = AsyncMock(return_value=client_instance)
+    client_cm.__aexit__ = AsyncMock(return_value=None)
+    with (
+        patch(
+            "app.api.v1.endpoints.connectors.httpx.AsyncClient",
+            return_value=client_cm,
+        ),
+        patch(
+            "app.api.v1.endpoints.connectors._load_fallback_catalog",
+            return_value=[],
+        ),
     ):
         with pytest.raises(HTTPException) as exc_info:
             await _fetch_catalog()
