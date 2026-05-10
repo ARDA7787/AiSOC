@@ -32,6 +32,7 @@ from app.api.v1.endpoints import (
     inbox_itsm,
     knowledge_base,
     lake,
+    llm_credentials,
     llm_status,
     nl_detection,
     nl_query,
@@ -161,6 +162,14 @@ api_router.include_router(airgap.router)
 # API key itself. Same code path the egress gate uses, so the indicator
 # in the UI cannot drift from runtime behaviour (WS-H2/H4 visibility).
 api_router.include_router(llm_status.router)
+
+# BYOK per-tenant LLM credentials — WS-H2 (buyer-value plan).
+# Settings-write CRUD over tenant_llm_credentials. The plaintext API key
+# is encrypted via the credential vault before it touches Postgres; the
+# read path returns has_api_key/last_rotated_at but never the key itself.
+# Resolution order at request time is per-tenant row > env-var fallback
+# (see llm_status.py + agents/explain.py).
+api_router.include_router(llm_credentials.router)
 
 # STIX/TAXII threat intelligence publishing (Tier 4)
 api_router.include_router(stix_taxii.router)

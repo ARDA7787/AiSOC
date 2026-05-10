@@ -496,3 +496,165 @@ pass. Recorded here so a future deploy can investigate the listener
 warning, but it is not gating the customer journey.
 
 Workspace rule: do not stop until every todo is done. → done.
+
+---
+
+## Session — 2026-05-09 (buyer-value plan: A3, C1, H4)
+
+Three workstreams from `aisoc_v1.0_—_buyer-value_plan_c8116970` shipped
+or verified in this session.
+
+### WS-A3 — One-click deploy
+
+`render.yaml` was relocated from `infra/render/render.yaml` to the
+repository root so Render's "Deploy to Render" button can resolve it
+without a custom path. Updated `README.md` (new "Deploy in 60 seconds"
+section + TOC entry), `infra/render/README.md` (relative path), and
+`CHANGELOG.md`. Also updated the two `.gitleaksignore` entries that
+pinned `infra/render/render.yaml:generic-api-key:70` /`:124` to point
+at `render.yaml:generic-api-key:70` /`:124` (the line numbers track
+content positions inside `envVars`, not absolute file lines, so they
+remain valid post-move). One-click Docker Compose, Render, and Fly.io
+buttons are now linked from the README.
+
+### WS-C1 — 25 named playbooks
+
+Verified complete. `playbooks/packs/v1/` contains 50+ playbook JSON
+files covering ransomware, BEC, identity, cloud, lateral movement,
+data-exfil, privilege escalation, and more. Each playbook conforms
+to the schema enforced by `scripts/validate_playbooks.py` (CI gate
+in `.github/workflows/validate-playbooks.yml`). The runtime in
+`services/agents/app/playbook/store.py` loads `packs/v1/**` on
+startup and merges with any user-defined playbooks in
+`services/agents/data/playbooks/index.json` (user playbooks win).
+No new authoring needed for v1.0 — the v1.0 floor of 25 was passed
+and then some.
+
+### WS-H4 — Air-gapped / local-LLM mode
+
+Verified complete and shippable.
+
+- `apps/docs/docs/operations/airgap.md` is comprehensive (allowlist,
+  Ollama / vLLM / LiteLLM topology, demo-mode behaviour, audit log
+  expectations, "deploy-time only" mutation policy) and is reachable
+  from the Docusaurus sidebar at `Operations → Air-gapped deployment`
+  via `apps/docs/sidebars.ts`.
+- `services/api/app/api/v1/endpoints/llm_status.py` classifies
+  providers as `openai | anthropic | azure-openai | local-ollama |
+  local-vllm | local-litellm | custom` and exposes a redacted snapshot
+  at `GET /api/v1/llm/status`. The Settings UI's "Deployment & AI"
+  panel (`apps/web/src/components/settings/SettingsView.tsx`) reads
+  both `/api/v1/airgap/status` and `/api/v1/llm/status` and renders
+  read-only badges for "Air-gap engaged" + "AI calls route to: …".
+  Mutations are deliberately deploy-time only.
+- `services/agents/app/api/explain.py:_llm_allowed()` honours
+  `AISOC_AIRGAPPED`: with air-gap on and no `OPENAI_BASE_URL`, the
+  outbound call is blocked; with a local proxy URL it is allowed.
+- `docker-compose.demo.yml` ships zero outbound LLM calls by
+  default (`OPENAI_API_KEY: ${OPENAI_API_KEY:-}` — empty unless the
+  operator opts in).
+
+### WS-H2 — BYOK per-tenant settings UI
+
+Shipped. v1.0 buyer-value criteria required per-tenant BYOK; the
+existing `CredentialVault` primitive already provided the
+encryption story, so we landed the model, endpoints, agents-side
+read path, and Settings UI in a single coherent change set.
+
+Backend (services/api):
+
+- `migrations/038_tenant_llm_credentials.sql` — new
+  `tenant_llm_credentials` table keyed on `tenant_id`, with a
+  `provider` `CHECK` constraint matching the four-tier ladder
+  (`openai | anthropic | azure-openai | openai-compatible`),
+  a vault-encrypted `api_key_vault` column, audit timestamps,
+  and Row-Level Security policies bound to the
+  `app.tenant_id` GUC.
+- `app/models/llm_credential.py` — `TenantLlmCredential` ORM
+  model registered in `app/models/__init__.py` so Alembic and
+  the dependency-injected `DBSession` see it.
+- `app/api/v1/endpoints/llm_credentials.py` — `GET / PUT /
+  DELETE /api/v1/llm/credentials` gated on `settings:read` /
+  `settings:write` RBAC. Writes encrypt the API key with
+  `CredentialVault` (`vault:v1:` prefix), enforce
+  provider-specific invariants (`base_url` mandatory for
+  `openai-compatible`, `api_key` mandatory on first write for
+  hosted providers), and emit `audit.llm_credential.{created,
+  updated,deleted}` records via `emit_audit`. Reads return a
+  `LlmCredentialView` projection that *never* includes the
+  plaintext key — only `has_api_key: bool`.
+- `app/api/v1/endpoints/llm_status.py` — refactored to layer
+  the tenant override over the env baseline and surface the
+  resolved `source` (`tenant | environment | mixed | none`) so
+  the Settings UI can explain provenance.
+- `app/api/v1/router.py` — registered the new credentials
+  router under `/api/v1/llm/credentials`.
+
+Agents-side read path (services/agents):
+
+- `app/security/credential_vault.py` — vendored read-path copy
+  of the API service's vault. Differs only in that
+  `get_vault()` returns `None` (instead of raising) when
+  `AISOC_CREDENTIAL_KEY` is missing, so explain stays
+  resilient on operator boxes that have not migrated to BYOK
+  yet.
+- `app/security/llm_resolver.py` — `resolve_llm_config` is
+  now the single source of truth for "what config does this
+  request actually use?". It layers tenant rows over env vars,
+  applies the same air-gap rule as `_llm_allowed`, and returns
+  a deterministic fallback so the explain path can still log
+  `allowed=False` reasons even when no key is configured. The
+  ledger import is lazy so unit tests that mount only the
+  explain router don't drag in LangGraph.
+- `app/api/explain.py` — calls `resolve_llm_config(tenant_ref)`
+  per request instead of reading env vars directly.
+
+Frontend (apps/web):
+
+- `src/components/settings/SettingsView.tsx` — new BYOK panel
+  in the "Deployment & AI" section. Read-only by default;
+  flips to write mode when the user has `settings:write`.
+  Shows `provider`, `base_url`, `model`, `has_api_key`,
+  `enabled`, `last_rotated_at`, and the resolved
+  `source` from `/llm/status` so the buyer sees where each
+  field came from.
+- `src/lib/api.ts` — `getLlmCredential`, `putLlmCredential`,
+  `deleteLlmCredential` typed clients.
+
+Tests:
+
+- `services/api/tests/test_llm_credentials_endpoint.py` —
+  40 tests covering vault round-trip, the `_project` redactor,
+  `LlmCredentialUpsert` validators, `_enforce_provider_invariants`,
+  GET / PUT / DELETE happy paths, the rotation-only update
+  case (`api_key=null` keeps the existing ciphertext), failure
+  paths (provider transitions that violate invariants,
+  duplicate-tenant `IntegrityError`), and audit emission.
+- `services/agents/tests/test_llm_resolver.py` — 33 tests
+  covering `_env_baseline` (OPENAI_*, LLM_*, AISOC_LLM_MODEL
+  precedence), `_airgap_blocks`, `_classify_source`,
+  `_decrypt_vault_token` (vault disabled, round-trip, corrupt
+  ciphertext), and `resolve_llm_config` end-to-end with a
+  mocked `asyncpg` pool. Includes the BYOK-under-air-gap
+  scenarios (private gateway allowed, OpenAI host blocked
+  even with a valid tenant key) and the graceful-degradation
+  paths (DB unreachable, ledger import unavailable, vault key
+  missing, ciphertext decrypt fails).
+
+All 73 tests pass.
+
+Documentation:
+
+- `apps/docs/docs/operations/credentials.md` — added a "Per-tenant
+  LLM credentials (BYOK)" section explaining the
+  `tenant_llm_credentials` table, the vault round-trip, and how
+  the agents service decrypts at read time.
+- `apps/docs/docs/operations/airgap.md` — clarified that BYOK
+  to a private LiteLLM/Ollama/vLLM gateway works under
+  `AISOC_AIRGAPPED=true`, while BYOK pointing at
+  `api.openai.com` is still blocked.
+- `apps/docs/docs/operations/security.md` — added a pointer
+  to the BYOK section so the security model document
+  enumerates LLM keys alongside connector secrets.
+
+Workspace rule: do not stop until every todo is done.

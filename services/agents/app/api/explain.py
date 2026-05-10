@@ -54,14 +54,26 @@ started reading still gets a structured failure to render.
 BYOK / per-tenant LLM overrides
 -------------------------------
 
-Per-tenant API-key overrides (Bring-Your-Own-Key) are explicitly
-deferred to v1.1 — the live snapshot is documented in
-``services/api/app/api/v1/endpoints/llm_status.py``. v1 honours a
-single process-wide configuration (``OPENAI_API_KEY`` /
-``OPENAI_BASE_URL`` / ``AISOC_AIRGAPPED``) so we don't ship a half-
-finished credential model that we'd later need to migrate. Tenant ID
-is still recorded on every request so the v1.1 cutover is purely a
-code change, not a data migration.
+Each tenant can override the process-wide LLM configuration by
+storing a vault-encrypted row in ``tenant_llm_credentials``
+(operator UI: Settings → Deployment & AI). On every request we call
+:func:`app.security.llm_resolver.resolve_llm_config` to layer the
+tenant overrides — base URL, model, API key — over the env baseline
+(``OPENAI_API_KEY`` / ``OPENAI_BASE_URL`` / ``OPENAI_MODEL``) and
+re-evaluate the air-gap policy against the *resolved* base URL. A
+tenant who BYOKs a private LiteLLM gateway therefore stays allowed
+under ``AISOC_AIRGAPPED=true``, exactly the same way the env-only
+path does today.
+
+The resolver is failure-tolerant: a missing ``DATABASE_URL``, an
+unreachable database, an unconfigured ``AISOC_CREDENTIAL_KEY``, a
+corrupt ciphertext, or a tenant row with ``enabled=false`` all
+silently degrade to the env baseline. The single source of truth
+for *which* config the path actually picked is the
+``llm_resolve_*`` log lines emitted on failure paths and the
+``X-LLM-Source`` header (``tenant`` | ``environment`` | ``mixed`` |
+``none``) we emit on the response so an operator can confirm BYOK
+is actually being applied.
 
 NDJSON frame shapes
 -------------------
@@ -105,6 +117,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.core.rate_limit import RateLimitDecision, TokenBucketLimiter
+from app.security.llm_resolver import LlmConfig, resolve_llm_config
 
 logger = structlog.get_logger()
 
@@ -533,46 +546,33 @@ def _build_summary(alert: dict[str, Any], mitre_ids: list[str]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _llm_allowed() -> bool:
-    """Decide whether to attempt an outbound LLM call.
-
-    Honours ``AISOC_AIRGAPPED``: when true, only allow if
-    ``OPENAI_BASE_URL`` is set to something other than openai.com (i.e.
-    a local LiteLLM/Ollama proxy on a private host).
-    """
-    if not os.getenv("OPENAI_API_KEY"):
-        return False
-
-    airgapped = os.getenv("AISOC_AIRGAPPED", "").lower() in ("1", "true", "yes")
-    if not airgapped:
-        return True
-
-    base = (os.getenv("OPENAI_BASE_URL") or "").lower()
-    if not base:
-        return False  # would hit api.openai.com — blocked
-    return "api.openai.com" not in base
-
-
 async def _llm_summary(
     alert: dict[str, Any],
     mitre_techs: list[dict[str, Any]],
     fallback: str,
+    llm_config: LlmConfig,
 ) -> str:
     """Ask the model for a tightly-scoped summary, with a hard fallback.
 
     The prompt deliberately forbids inventing technique IDs — the
     structured cards are emitted from the corpus, so the model only ever
     explains, never enumerates.
+
+    The caller is responsible for resolving ``llm_config`` (typically via
+    :func:`app.security.llm_resolver.resolve_llm_config`); we only honour
+    its ``allowed`` flag, base URL, model, and api_key. This keeps all
+    BYOK / air-gap layering decisions in one place and means this
+    function has zero awareness of where the credentials came from.
     """
-    if not _llm_allowed():
+    if not llm_config.allowed or not llm_config.api_key:
         return fallback
 
     try:
         import httpx
 
-        base = (os.getenv("OPENAI_BASE_URL") or "https://api.openai.com").rstrip("/")
+        base = llm_config.base_url.rstrip("/")
         url = f"{base}/v1/chat/completions"
-        model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        model = llm_config.model
 
         tech_lines = [
             f"- {t['id']} {t['name']} ({', '.join(t.get('tactic_names') or []) or 'unknown tactic'})"
@@ -613,7 +613,7 @@ async def _llm_summary(
         async with httpx.AsyncClient(timeout=20) as client:
             resp = await client.post(
                 url,
-                headers={"Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}"},
+                headers={"Authorization": f"Bearer {llm_config.api_key}"},
                 json={"model": model, "messages": messages, "max_tokens": 320},
             )
             resp.raise_for_status()
@@ -633,7 +633,9 @@ def _frame(obj: dict[str, Any]) -> bytes:
     return (json.dumps(obj) + "\n").encode()
 
 
-async def _stream_explanation(req: ExplainRequest) -> AsyncIterator[bytes]:
+async def _stream_explanation(
+    req: ExplainRequest, llm_config: LlmConfig
+) -> AsyncIterator[bytes]:
     alert = req.alert or {}
     alert_id = req.alert_id or alert.get("id") or "unknown"
 
@@ -646,7 +648,7 @@ async def _stream_explanation(req: ExplainRequest) -> AsyncIterator[bytes]:
         # Run the LLM call concurrently with the deterministic emissions
         # so the drawer paints fast even on a cold network.
         summary_task = asyncio.create_task(
-            _llm_summary(alert, mitre_cards, fallback_summary)
+            _llm_summary(alert, mitre_cards, fallback_summary, llm_config)
         )
 
         yield _frame({"kind": "section", "id": "summary", "title": "What happened"})
@@ -728,9 +730,21 @@ async def explain(req: ExplainRequest, request: Request) -> StreamingResponse:
                 headers=headers,
             )
 
-    response_headers = decision.to_headers() if decision is not None else None
+    # Resolve the effective LLM config once per request so the stream
+    # generator never has to reach into the database itself, and so
+    # operators can see — via response headers — which knob took
+    # effect (env / tenant / fallback). The resolver is async-safe and
+    # already falls back to env-only if the database or vault is down.
+    llm_config = await resolve_llm_config(req.tenant_id)
+
+    response_headers: dict[str, str] = {}
+    if decision is not None:
+        response_headers.update(decision.to_headers())
+    response_headers["X-LLM-Source"] = llm_config.source
+    response_headers["X-LLM-Allowed"] = "1" if llm_config.allowed else "0"
+
     return StreamingResponse(
-        _stream_explanation(req),
+        _stream_explanation(req, llm_config),
         media_type="application/x-ndjson",
         headers=response_headers,
     )

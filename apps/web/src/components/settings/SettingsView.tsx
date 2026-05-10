@@ -25,13 +25,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { format, formatDistanceToNow } from 'date-fns';
 import toast from 'react-hot-toast';
 import {
+  ApiError,
   connectorsApi,
   deploymentApi,
   type AirgapStatus,
   type Connector,
   type ConnectorStatus,
+  type LlmCredentialUpsert,
+  type LlmCredentialView,
   type LlmProvider,
   type LlmStatus,
+  type LlmWritableProvider,
 } from '@/lib/api';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -1303,20 +1307,23 @@ function AppearancePanel() {
 
 // ─── Panel: Deployment & AI ───────────────────────────────────────────────────
 //
-// Read-only operator visibility for two questions that are always asked during
-// security review:
+// Operator visibility + per-tenant BYOK control for three questions that are
+// always asked during security review:
 //
 //   1. "Is air-gap actually engaged on this pod?"            → /api/v1/airgap/status
 //   2. "Where will my AI calls actually go?"                 → /api/v1/llm/status
+//   3. "Can this tenant point AI at its own LLM (BYOK)?"     → /api/v1/llm/credentials
 //
-// Both endpoints are server-rendered snapshots that mirror the same code paths
-// the runtime uses to gate egress (``app.core.airgap.is_host_allowed_for_airgap``)
+// (1) and (2) are server-rendered snapshots that mirror the same code paths the
+// runtime uses to gate egress (``app.core.airgap.is_host_allowed_for_airgap``)
 // and to pick the LLM transport (``services/agents/app/api/explain.py``). That
 // is deliberate: the indicator the operator sees here CANNOT drift from runtime
 // behaviour — there is no second source of truth.
 //
-// This panel never accepts input. It is purely a diagnostic surface; mutations
-// happen out-of-band (env vars, deploy-time config, BYOK rotation).
+// (3) is a write surface, scoped to the current tenant and protected by the
+// ``settings:write`` permission. API keys are never echoed back; the backend
+// only ever returns ``has_api_key`` so the UI can show "set / not set". Mutations
+// are encrypted with ``CredentialVault`` server-side and audit-logged.
 
 const PROVIDER_LABEL: Record<LlmProvider, string> = {
   openai: 'OpenAI',
@@ -1340,19 +1347,25 @@ function DeploymentAIPanel() {
     () => deploymentApi.getLlmStatus(),
     { revalidateOnFocus: false, shouldRetryOnError: false },
   );
+  const credential = useSWR(
+    'settings:llm-credential',
+    () => deploymentApi.getLlmCredential(),
+    { revalidateOnFocus: false, shouldRetryOnError: false },
+  );
 
   const isLoading = airgap.isLoading || llm.isLoading;
   const error = airgap.error ?? llm.error;
   const onRetry = () => {
     airgap.mutate();
     llm.mutate();
+    credential.mutate();
   };
 
   return (
     <div>
       <PanelHeader
         title="Deployment & AI"
-        description="Live air-gap policy and LLM provider snapshot for this AiSOC pod. Read-only."
+        description="Air-gap policy, LLM provider snapshot, and per-tenant BYOK overrides for this AiSOC pod."
       />
       <div className="space-y-5 px-6 py-5">
         {isLoading && !airgap.data && !llm.data ? (
@@ -1373,10 +1386,21 @@ function DeploymentAIPanel() {
             {llm.data ? (
               <LlmCard llm={llm.data} airgap={airgap.data ?? null} />
             ) : null}
+            <BYOKCard
+              credential={credential.data ?? null}
+              isLoading={credential.isLoading}
+              error={credential.error}
+              onChanged={() => {
+                credential.mutate();
+                // Resolved LLM status changes whenever a tenant override moves,
+                // so refresh the read-only snapshot too.
+                llm.mutate();
+              }}
+            />
             <p className="text-xs text-gray-500">
-              These values are sampled live from this pod and mirror the egress
-              gate exactly. To change them, update environment variables and
-              redeploy. See{' '}
+              The air-gap policy and provider snapshot above are sampled live
+              from this pod and mirror the egress gate exactly. To change them
+              cluster-wide, update environment variables and redeploy. See{' '}
               <a
                 href="https://beenuar.github.io/AiSOC/docs/operations/airgap/"
                 target="_blank"
@@ -1583,6 +1607,500 @@ function LlmCard({
       {!blockedByAirgap && !isFallback && llm.policy_note ? (
         <p className="mt-4 text-xs text-gray-500">{llm.policy_note}</p>
       ) : null}
+    </section>
+  );
+}
+
+// ─── BYOK helpers ─────────────────────────────────────────────────────────────
+
+const WRITABLE_PROVIDERS: readonly LlmWritableProvider[] = [
+  'openai',
+  'anthropic',
+  'azure-openai',
+  'local-ollama',
+  'local-vllm',
+  'local-litellm',
+  'custom',
+] as const;
+
+const PROVIDERS_REQUIRING_BASE_URL: ReadonlySet<LlmWritableProvider> = new Set([
+  'local-ollama',
+  'local-vllm',
+  'local-litellm',
+  'custom',
+]);
+
+const PROVIDERS_REQUIRING_API_KEY: ReadonlySet<LlmWritableProvider> = new Set([
+  'openai',
+  'anthropic',
+  'azure-openai',
+]);
+
+function providerHintFor(p: LlmWritableProvider): {
+  baseUrlPlaceholder: string;
+  baseUrlHint: string;
+} {
+  switch (p) {
+    case 'local-ollama':
+      return {
+        baseUrlPlaceholder: 'http://ollama.example.local:11434',
+        baseUrlHint: 'Point at your Ollama server (default port 11434).',
+      };
+    case 'local-vllm':
+      return {
+        baseUrlPlaceholder: 'http://vllm.example.local:8000/v1',
+        baseUrlHint: 'OpenAI-compatible vLLM endpoint, typically /v1.',
+      };
+    case 'local-litellm':
+      return {
+        baseUrlPlaceholder: 'http://litellm.example.local:4000',
+        baseUrlHint: 'LiteLLM proxy URL.',
+      };
+    case 'custom':
+      return {
+        baseUrlPlaceholder: 'https://internal-llm.example.com/v1',
+        baseUrlHint: 'OpenAI-compatible HTTP(S) endpoint.',
+      };
+    case 'azure-openai':
+      return {
+        baseUrlPlaceholder: 'https://my-resource.openai.azure.com',
+        baseUrlHint: 'Optional override for your Azure OpenAI resource.',
+      };
+    default:
+      return {
+        baseUrlPlaceholder: '',
+        baseUrlHint: '',
+      };
+  }
+}
+
+function extractApiDetail(err: unknown, fallback = 'Something went wrong.'): string {
+  if (err instanceof ApiError) {
+    if (err.body) {
+      try {
+        const parsed = JSON.parse(err.body);
+        if (parsed && typeof parsed.detail === 'string') return parsed.detail;
+      } catch {
+        // body wasn't JSON — fall through
+      }
+    }
+    return err.message || fallback;
+  }
+  if (err instanceof Error) return err.message || fallback;
+  return fallback;
+}
+
+// ─── Card: BYOK (write surface) ──────────────────────────────────────────────
+
+function BYOKCard({
+  credential,
+  isLoading,
+  error,
+  onChanged,
+}: {
+  credential: LlmCredentialView | null;
+  isLoading: boolean;
+  error: unknown;
+  onChanged: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [provider, setProvider] = useState<LlmWritableProvider>('openai');
+  const [baseUrl, setBaseUrl] = useState('');
+  const [model, setModel] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [enabled, setEnabled] = useState(true);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // Reset form whenever we enter edit mode (or the underlying credential
+  // moves while editing). Never preload the API key — it lives only in
+  // the vault on the server.
+  useEffect(() => {
+    if (!editing) {
+      setFormError(null);
+      setApiKey('');
+      return;
+    }
+    if (credential) {
+      setProvider(credential.provider);
+      setBaseUrl(credential.base_url ?? '');
+      setModel(credential.model ?? '');
+      setEnabled(credential.enabled);
+    } else {
+      setProvider('openai');
+      setBaseUrl('');
+      setModel('');
+      setEnabled(true);
+    }
+    setApiKey('');
+    setFormError(null);
+  }, [editing, credential]);
+
+  const requiresBaseUrl = PROVIDERS_REQUIRING_BASE_URL.has(provider);
+  const requiresApiKey = PROVIDERS_REQUIRING_API_KEY.has(provider);
+
+  // Only treat the existing key as "carry-over" when the user keeps the
+  // same provider — switching providers must require a fresh key.
+  const hasExistingKey = Boolean(
+    credential?.has_api_key && credential?.provider === provider,
+  );
+
+  const providerHint = useMemo(() => providerHintFor(provider), [provider]);
+
+  const onSave = async () => {
+    setFormError(null);
+    if (requiresBaseUrl && !baseUrl.trim()) {
+      setFormError(`${PROVIDER_LABEL[provider]} requires a base URL.`);
+      return;
+    }
+    if (requiresApiKey && !apiKey.trim() && !hasExistingKey) {
+      setFormError(`${PROVIDER_LABEL[provider]} requires an API key.`);
+      return;
+    }
+
+    const payload: LlmCredentialUpsert = {
+      provider,
+      base_url: baseUrl.trim() ? baseUrl.trim() : null,
+      model: model.trim() ? model.trim() : null,
+      api_key: apiKey.trim() ? apiKey.trim() : null,
+      enabled,
+    };
+
+    setSubmitting(true);
+    try {
+      await deploymentApi.upsertLlmCredential(payload);
+      toast.success(
+        credential ? 'BYOK credential updated.' : 'BYOK credential saved.',
+      );
+      setEditing(false);
+      onChanged();
+    } catch (err) {
+      const detail = extractApiDetail(err, 'Could not save BYOK credential.');
+      setFormError(detail);
+      toast.error(detail);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const onCancel = () => {
+    setEditing(false);
+  };
+
+  const onDeleteClick = async () => {
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await deploymentApi.deleteLlmCredential();
+      toast.success(
+        'BYOK credential removed. Falling back to platform defaults.',
+      );
+      setConfirmingDelete(false);
+      onChanged();
+    } catch (err) {
+      toast.error(extractApiDetail(err, 'Could not remove BYOK credential.'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (isLoading && !credential) {
+    return <Skeleton className="h-32 w-full rounded-lg" />;
+  }
+
+  // Credential fetch is independent of the read-only LLM snapshot, so a
+  // failure here shouldn't poison the rest of the panel — render a soft
+  // inline notice instead.
+  if (error) {
+    return (
+      <section className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+        <p className="text-sm font-medium text-amber-200">
+          BYOK panel unavailable
+        </p>
+        <p className="mt-1 text-xs text-amber-300/70">
+          {extractApiDetail(error, 'Could not load tenant LLM credential.')}
+        </p>
+      </section>
+    );
+  }
+
+  // ── VIEW: have credential, not editing ──────────────────────────────────
+  if (credential && !editing) {
+    return (
+      <section className="rounded-lg border border-gray-800 bg-gray-950/40 p-5">
+        <header className="flex items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-gray-200">
+                Bring-your-own-LLM (BYOK)
+              </h3>
+              {credential.enabled ? (
+                <StatusPill tone="emerald" label="Active" />
+              ) : (
+                <StatusPill tone="gray" label="Disabled" />
+              )}
+            </div>
+            <p className="mt-1 text-xs text-gray-500">
+              Per-tenant override for this AiSOC workspace. The platform
+              uses these settings instead of the pod-level defaults.
+            </p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="rounded-md border border-gray-700 bg-gray-900 px-3 py-1.5 text-xs font-medium text-gray-200 hover:bg-gray-800"
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={onDeleteClick}
+              disabled={submitting}
+              className={clsx(
+                'rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50',
+                confirmingDelete
+                  ? 'border border-red-500/50 bg-red-500/15 text-red-200 hover:bg-red-500/25'
+                  : 'border border-gray-700 bg-gray-900 text-gray-200 hover:bg-gray-800',
+              )}
+            >
+              {confirmingDelete ? 'Confirm remove' : 'Remove'}
+            </button>
+          </div>
+        </header>
+        <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <KeyValue label="Provider">
+            <span className="text-sm text-gray-200">
+              {PROVIDER_LABEL[credential.provider]}
+            </span>
+          </KeyValue>
+          <KeyValue label="Endpoint">
+            {credential.base_url ? (
+              <span className="break-all font-mono text-xs text-gray-300">
+                {credential.base_url}
+              </span>
+            ) : (
+              <span className="text-xs text-gray-500">Provider default</span>
+            )}
+          </KeyValue>
+          <KeyValue label="Model">
+            {credential.model ? (
+              <span className="font-mono text-xs text-gray-300">
+                {credential.model}
+              </span>
+            ) : (
+              <span className="text-xs text-gray-500">Provider default</span>
+            )}
+          </KeyValue>
+          <KeyValue label="API key">
+            <span
+              className={clsx(
+                'inline-flex items-center gap-1.5 text-xs',
+                credential.has_api_key ? 'text-emerald-300' : 'text-gray-400',
+              )}
+            >
+              <span
+                aria-hidden
+                className={clsx(
+                  'inline-block h-1.5 w-1.5 rounded-full',
+                  credential.has_api_key ? 'bg-emerald-400' : 'bg-gray-600',
+                )}
+              />
+              {credential.has_api_key ? 'Set (vault-encrypted)' : 'Not set'}
+            </span>
+          </KeyValue>
+          <KeyValue label="Last rotated">
+            {credential.last_rotated_at ? (
+              <span
+                className="text-xs text-gray-300"
+                title={credential.last_rotated_at}
+              >
+                {formatDistanceToNow(new Date(credential.last_rotated_at), {
+                  addSuffix: true,
+                })}
+              </span>
+            ) : (
+              <span className="text-xs text-gray-500">Never</span>
+            )}
+          </KeyValue>
+          <KeyValue label="Updated">
+            <span
+              className="text-xs text-gray-300"
+              title={credential.updated_at}
+            >
+              {formatDistanceToNow(new Date(credential.updated_at), {
+                addSuffix: true,
+              })}
+            </span>
+          </KeyValue>
+        </dl>
+        {confirmingDelete ? (
+          <p className="mt-4 text-xs text-amber-300/80">
+            Click <span className="font-semibold">Confirm remove</span> again
+            to delete this credential. The platform will fall back to the
+            pod-level LLM defaults.
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(false)}
+              className="ml-2 underline hover:text-amber-200"
+            >
+              Cancel
+            </button>
+          </p>
+        ) : null}
+      </section>
+    );
+  }
+
+  // ── EMPTY: no credential, not editing ────────────────────────────────────
+  if (!credential && !editing) {
+    return (
+      <section className="rounded-lg border border-gray-800 bg-gray-950/40 p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-200">
+              Bring-your-own-LLM (BYOK)
+            </h3>
+            <p className="mt-1 text-xs text-gray-500">
+              No tenant override configured. Investigations use the pod-level
+              defaults shown above. Configure BYOK to point this tenant at
+              your own provider — keys are stored vault-encrypted.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="shrink-0 rounded-md border border-blue-500/50 bg-blue-500/15 px-3 py-1.5 text-xs font-medium text-blue-200 hover:bg-blue-500/25"
+          >
+            Configure BYOK
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  // ── EDIT: form (creating or editing) ─────────────────────────────────────
+  return (
+    <section className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-5">
+      <header className="mb-4">
+        <h3 className="text-sm font-semibold text-gray-200">
+          {credential ? 'Edit BYOK credential' : 'Configure BYOK credential'}
+        </h3>
+        <p className="mt-1 text-xs text-gray-500">
+          API keys are encrypted with the platform credential vault before
+          persistence and are never returned to the UI.
+        </p>
+      </header>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Provider">
+          <select
+            value={provider}
+            onChange={e => setProvider(e.target.value as LlmWritableProvider)}
+            disabled={submitting}
+            className={inputClass()}
+          >
+            {WRITABLE_PROVIDERS.map(p => (
+              <option key={p} value={p}>
+                {PROVIDER_LABEL[p]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field
+          label="Model"
+          hint="Provider-specific identifier (e.g. 'gpt-4o-mini', 'llama3.1:8b'). Leave blank for provider default."
+        >
+          <input
+            type="text"
+            value={model}
+            onChange={e => setModel(e.target.value)}
+            placeholder="provider default"
+            disabled={submitting}
+            className={inputClass()}
+          />
+        </Field>
+        <Field
+          label={`Base URL${requiresBaseUrl ? ' *' : ''}`}
+          hint={
+            requiresBaseUrl
+              ? `Required. ${providerHint.baseUrlHint}`
+              : providerHint.baseUrlHint
+              ? `Optional override. ${providerHint.baseUrlHint}`
+              : 'Optional override. Leave blank to use the provider default.'
+          }
+        >
+          <input
+            type="url"
+            value={baseUrl}
+            onChange={e => setBaseUrl(e.target.value)}
+            placeholder={providerHint.baseUrlPlaceholder}
+            disabled={submitting}
+            className={inputClass()}
+          />
+        </Field>
+        <Field
+          label={`API key${requiresApiKey && !hasExistingKey ? ' *' : ''}`}
+          hint={
+            hasExistingKey
+              ? 'A key is already stored. Leave blank to keep it; type a new value to rotate.'
+              : requiresApiKey
+              ? 'Required for hosted SaaS providers. Vault-encrypted before storage.'
+              : 'Optional — most local providers do not require auth.'
+          }
+        >
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={apiKey}
+            onChange={e => setApiKey(e.target.value)}
+            placeholder={
+              hasExistingKey ? '•••••••• (unchanged)' : 'paste your API key'
+            }
+            disabled={submitting}
+            className={inputClass()}
+          />
+        </Field>
+      </div>
+      <div className="mt-4">
+        <Toggle
+          checked={enabled}
+          onChange={setEnabled}
+          label="Use this credential"
+          description="When disabled, the platform falls back to the pod-level defaults shown above without deleting your saved settings."
+        />
+      </div>
+      {formError ? (
+        <p className="mt-4 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-200">
+          {formError}
+        </p>
+      ) : null}
+      <footer className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={submitting}
+          className="rounded-md border border-gray-700 bg-gray-900 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-800 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={submitting}
+          className="rounded-md bg-blue-500/80 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+        >
+          {submitting
+            ? 'Saving…'
+            : credential
+            ? 'Save changes'
+            : 'Save credential'}
+        </button>
+      </footer>
     </section>
   );
 }

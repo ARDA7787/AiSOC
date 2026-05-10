@@ -123,6 +123,101 @@ Not in the vault (stored as plaintext JSON for operational visibility):
 
 This split is deliberate. Identifiers are useful for support and observability (logs, dashboards, error messages); secrets must never appear in either.
 
+## Per-tenant LLM credentials (BYOK)
+
+In addition to connector secrets, the same vault encrypts **per-tenant
+LLM credentials**. This is the substrate for "bring your own key"
+(BYOK): each tenant can point AiSOC at its own OpenAI account, Azure
+OpenAI deployment, Anthropic key, or self-hosted OpenAI-compatible
+gateway (Ollama / vLLM / LiteLLM) without leaking that key to other
+tenants on the same control plane.
+
+### Storage
+
+Migration `038_tenant_llm_credentials.sql` creates one row per tenant
+in `tenant_llm_credentials`:
+
+| Column | Notes |
+|---|---|
+| `tenant_id` (PK) | Foreign key to `tenants.id`; one BYOK row per tenant |
+| `provider` | `openai`, `anthropic`, `azure-openai`, `openai-compatible` (CHECK constraint) |
+| `base_url` | Required for `openai-compatible`, optional for hosted providers |
+| `model` | Optional override; falls back to env if blank |
+| `api_key_vault` | The vault-encrypted token (`vault:v1:…`); never returned to the UI |
+| `settings` | Free-form JSONB for provider-specific knobs (e.g. Azure `api_version`) |
+| `enabled` | Operators can pause BYOK without deleting the row |
+| `created_at` / `updated_at` / `last_rotated_at` | Audit timestamps |
+
+The table has Row-Level Security bound to the same `app.tenant_id`
+GUC as every other tenant-scoped table; an authenticated user can
+only read or write their own tenant's row.
+
+### API surface
+
+Three endpoints under `/api/v1/llm/credentials`, gated by the
+`settings:read` and `settings:write` RBAC permissions:
+
+```http
+GET    /api/v1/llm/credentials   # returns LlmCredentialView | null
+PUT    /api/v1/llm/credentials   # upsert; encrypts api_key on the way in
+DELETE /api/v1/llm/credentials   # remove the row entirely
+```
+
+The `LlmCredentialView` projection deliberately exposes only
+`has_api_key: bool` — never the plaintext key, never the ciphertext.
+Rotation is "send a new `api_key`"; updating other fields without
+sending `api_key` keeps the existing ciphertext in place and bumps
+`last_rotated_at` only when a new key was actually written.
+
+Provider invariants are enforced server-side:
+
+- `openai-compatible` rows require a `base_url` (we won't silently
+  default to `api.openai.com` for self-hosted gateways).
+- Hosted providers (`openai`, `anthropic`, `azure-openai`) require an
+  `api_key` on **first** write; subsequent writes can omit it to update
+  only `base_url` / `model` / `settings`.
+
+### Audit
+
+Every mutation emits a structured audit log via `emit_audit`:
+
+```
+audit.llm_credential.created  tenant_id=… actor_user_id=… provider=…
+audit.llm_credential.updated  tenant_id=… actor_user_id=… provider=… rotated=true|false
+audit.llm_credential.deleted  tenant_id=… actor_user_id=… provider=…
+```
+
+The plaintext key is **never** logged.
+
+### Read path in the agents service
+
+`services/agents/app/security/llm_resolver.py:resolve_llm_config`
+is the single source of truth for "what config does this request
+actually use?". It:
+
+1. Reads the env baseline (`OPENAI_*` / `LLM_*` / `AISOC_LLM_MODEL`).
+2. Looks up the tenant's row via a vendored read-path
+   `CredentialVault` (see `services/agents/app/security/credential_vault.py`),
+   layering tenant-supplied fields over env values.
+3. Reports the resolved `source` (`tenant | environment | mixed |
+   none`) so `/api/v1/llm/status` and the Settings UI can show the
+   buyer where each field came from.
+4. Applies the air-gap rule (`AISOC_AIRGAPPED=true` blocks
+   `api.openai.com` even with a valid tenant key, but allows private
+   gateways like `litellm.internal:4000`).
+
+The agents-side vault is read-only. If `AISOC_CREDENTIAL_KEY` is
+missing on the agents box, `resolve_llm_config` degrades gracefully
+to the env baseline rather than refusing to serve.
+
+### UI
+
+The Settings → "Deployment & AI" panel
+(`apps/web/src/components/settings/SettingsView.tsx`) exposes the BYOK
+form to users with `settings:write`. Read-only viewers see the same
+provenance badges (provider, model, `has_api_key`, last rotated,
+resolved source) without the form controls.
+
 ## Hosted OAuth roadmap
 
 Several connectors (Azure, GCP, Google Workspace) currently require the operator to do an Azure-AD-app or service-account dance before they can be added in AiSOC. This is fine for SOC engineers but a friction point for everyone else. Hosted OAuth is the planned solution:

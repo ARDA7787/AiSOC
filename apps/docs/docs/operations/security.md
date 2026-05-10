@@ -19,7 +19,7 @@ The companion page [Credentials & secrets](./credentials) covers connector-crede
 | **API auth** | Scoped API keys (`aisoc_<48-hex>`, SHA-256 stored), JWT bearer tokens | Programmatic clients |
 | **Authorization** | Role-Based Access Control (8 built-in roles, fine-grained permissions) | Every endpoint |
 | **Tenant isolation** | Postgres Row-Level Security with `app.current_tenant_id` session variable | Every tenant-partitioned table |
-| **Secret storage** | Fernet (AES-128-CBC + HMAC-SHA256) at the application layer | Connector credentials |
+| **Secret storage** | Fernet (AES-128-CBC + HMAC-SHA256) at the application layer | Connector credentials, per-tenant LLM keys (BYOK) |
 | **Audit log** | Immutable append-only log with actor, IP, user-agent, request-ID | All write actions |
 | **Plugin verification** | Ed25519 signature verification on plugin manifests | Marketplace + private plugins |
 | **Transport** | TLS terminated at the ingress; service-mesh mTLS optional | All traffic |
@@ -136,9 +136,9 @@ For SOC 2 / ISO 27001 evidence collection, the [Compliance service](https://gith
 
 ## Secrets at rest
 
-Connector credentials are encrypted with Fernet at the application layer before they hit Postgres. The full threat model, key rotation procedure (`MultiFernet` + `AISOC_CREDENTIAL_KEY_ROTATION_FROM`), and the hosted-OAuth roadmap live in [Credentials & secrets](./credentials).
+Connector credentials and per-tenant LLM keys (BYOK) are encrypted with Fernet at the application layer before they hit Postgres. The full threat model, key rotation procedure (`MultiFernet` + `AISOC_CREDENTIAL_KEY_ROTATION_FROM`), the BYOK API surface (`/api/v1/llm/credentials`), and the hosted-OAuth roadmap live in [Credentials & secrets](./credentials). The agents-side read path is intentionally read-only — the encrypt/decrypt key authority lives in the API service; agents only decrypt at request time to layer tenant-supplied LLM config over the env baseline.
 
-For all other secrets (database URLs, JWT signing keys, Kafka credentials, LLM API keys), AiSOC reads from environment variables. In production, point those env vars at your secret manager of choice — AWS Secrets Manager, GCP Secret Manager, HashiCorp Vault, sealed-secrets, etc. The full list is in [Deployment → Environment variables](../deployment/env-vars).
+For all other secrets (database URLs, JWT signing keys, Kafka credentials, fallback/operator LLM API keys), AiSOC reads from environment variables. In production, point those env vars at your secret manager of choice — AWS Secrets Manager, GCP Secret Manager, HashiCorp Vault, sealed-secrets, etc. The full list is in [Deployment → Environment variables](../deployment/env-vars).
 
 The two never-commit rules:
 

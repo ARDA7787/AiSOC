@@ -3273,12 +3273,86 @@ export interface LlmStatus {
   policy_note: string;
 }
 
+// ─── BYOK per-tenant LLM credentials (WS-H2) ────────────────────────────────
+//
+// Mirrors ``services/api/app/api/v1/endpoints/llm_credentials.py``. The
+// plaintext API key is *write-only*; the server stores it vault-encrypted
+// and only ever returns ``has_api_key: bool`` so the UI can render
+// "credential set / not set" without round-tripping the secret.
+//
+// Provider invariants enforced server-side and surfaced in the UI:
+//   - ``local-ollama`` / ``local-vllm`` / ``local-litellm`` / ``custom``
+//     require a ``base_url``.
+//   - ``openai`` / ``anthropic`` / ``azure-openai`` require an ``api_key``
+//     (on first write; rotation-only PUTs may pass ``api_key: null``).
+//
+// The provider list is a *strict subset* of the read-side ``LlmProvider``
+// — ``none`` is never a writable choice.
+
+export type LlmWritableProvider =
+  | 'openai'
+  | 'anthropic'
+  | 'azure-openai'
+  | 'local-ollama'
+  | 'local-vllm'
+  | 'local-litellm'
+  | 'custom';
+
+export interface LlmCredentialUpsert {
+  provider: LlmWritableProvider;
+  /** Required for local + custom providers. Optional for hosted SaaS. */
+  base_url?: string | null;
+  /** Optional model override (e.g. "gpt-4o-mini"). */
+  model?: string | null;
+  /**
+   * Plaintext API key. Server vault-encrypts before persistence. Pass
+   * ``null`` (or omit) on a rotation-only PUT to keep the existing
+   * ciphertext untouched.
+   */
+  api_key?: string | null;
+  /** Free-form provider-specific settings (e.g. ``{ "temperature": 0.2 }``). */
+  settings?: Record<string, unknown> | null;
+  enabled?: boolean;
+}
+
+export interface LlmCredentialView {
+  provider: LlmWritableProvider;
+  base_url: string | null;
+  model: string | null;
+  /** True iff a vault-encrypted ciphertext is currently stored. */
+  has_api_key: boolean;
+  settings: Record<string, unknown>;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  /** Last time the API key was rotated (set/changed). Null if never. */
+  last_rotated_at: string | null;
+}
+
 export const deploymentApi = {
   /** Live air-gap policy snapshot for this pod. Safe to poll. */
   getAirgapStatus: () => request<AirgapStatus>('/api/v1/airgap/status'),
 
   /** Live LLM provider snapshot. Mirrors the egress gate's classification. */
   getLlmStatus: () => request<LlmStatus>('/api/v1/llm/status'),
+
+  /**
+   * Read the tenant's BYOK credential. Returns ``null`` when no credential
+   * is configured (the platform falls back to env-var defaults in that case).
+   */
+  getLlmCredential: () =>
+    request<LlmCredentialView | null>('/api/v1/llm/credentials'),
+
+  /** Create or update the tenant's BYOK credential. */
+  upsertLlmCredential: (payload: LlmCredentialUpsert) =>
+    request<LlmCredentialView>('/api/v1/llm/credentials', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+
+  /** Hard-delete the credential. Returns 204 on success. */
+  deleteLlmCredential: () =>
+    request<void>('/api/v1/llm/credentials', { method: 'DELETE' }),
 };
 
 // ─── Reports / Executive digest (WS-G2) ─────────────────────────────────────

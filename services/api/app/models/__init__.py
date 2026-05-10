@@ -16,6 +16,7 @@ from app.models.investigation import (
     InvestigationEvent,
     InvestigationRun,
 )
+from app.models.llm_credential import TenantLlmCredential
 from app.models.oauth import OAuthAppCredential, OAuthState
 from app.models.mssp import (
     MSSPDelegation,
@@ -75,6 +76,7 @@ __all__ = [
     "OAuthAppCredential",
     "OAuthState",
     "TenantInboxToken",
+    "TenantLlmCredential",
     "PasskeyCredential",
     "PasskeyChallenge",
     "OnCallStatus",

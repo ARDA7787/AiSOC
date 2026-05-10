@@ -4,8 +4,8 @@ Exposes a redacted snapshot of the active LLM configuration so operators
 and auditors can verify the runtime LLM provider, model, and air-gap
 compliance without shelling into a pod or grepping ``.env``. The
 endpoint mirrors the shape of ``/api/v1/airgap/status`` and is paired
-with the new "Deployment & AI" Settings panel in the web app
-(WS-H2 visibility slice / WS-H4 air-gap operator UX).
+with the "Deployment & AI" Settings panel in the web app
+(WS-H2 BYOK / WS-H4 air-gap operator UX).
 
 Contract
 --------
@@ -13,33 +13,58 @@ Contract
 * **Read-only.** No knobs to flip, no secrets returned. The API key
   itself is never serialized — only ``key_set: bool``.
 * **Best-effort.** When the operator hasn't set ``OPENAI_API_KEY`` /
-  ``OPENAI_BASE_URL``, the endpoint reports ``provider="none"`` and
-  ``effective_path="fallback"`` so the UI can clearly say
+  ``OPENAI_BASE_URL`` (and the tenant hasn't BYOK'd a row in
+  ``tenant_llm_credentials``), the endpoint reports ``provider="none"``
+  and ``effective_path="fallback"`` so the UI can clearly say
   "running on deterministic fallback".
 * **Air-gap aware.** Reuses ``app.core.airgap.is_host_allowed_for_airgap``
   so the answer to "would my LLM call actually leave the pod under the
   current air-gap policy?" comes from the *same* code path that gates
   egress at request time. No drift between the indicator and reality.
 
+Two views: env-only vs tenant-resolved
+--------------------------------------
+
+* :func:`llm_status` returns the *environment-only* baseline — what the
+  pod would do if no tenant context were involved. This is what the
+  unauthenticated ``GET /api/v1/llm/status`` endpoint serves and what
+  legacy callers like ``cost_dashboard`` consume.
+* :func:`tenant_llm_status` layers per-tenant BYOK overrides from
+  ``tenant_llm_credentials`` on top of the env baseline. Used by callers
+  that already have an authenticated tenant context. The ``source``
+  field on the returned snapshot says where each value came from
+  (``"environment"`` / ``"tenant"`` / ``"mixed"``) so the UI can surface
+  the layering honestly.
+
+The agents service performs the equivalent resolution over its raw
+``asyncpg`` connection (see ``services/agents/app/api/explain.py``)
+using the vendored credential vault, so the indicator and the
+runtime path stay in lockstep.
+
 Why we don't reuse ``deployment.get_airgap_status``
 ---------------------------------------------------
 
 ``app.api.v1.endpoints.deployment.get_airgap_status`` is an in-memory
-mock for a UI that hasn't shipped yet. This endpoint deliberately reads
-the *real* env-var-driven config so the indicator the operator sees in
-Settings matches the policy the gateway enforces. They will eventually
-converge once per-tenant overrides exist (v1.1 BYOK).
+mock for a legacy UI. This module deliberately reads the *real*
+env-var-driven config (and ``tenant_llm_credentials``) so the
+indicator the operator sees in Settings matches the policy the
+gateway enforces.
 """
 
 from __future__ import annotations
 
 import os
+import uuid
 from urllib.parse import urlparse
 
 from fastapi import APIRouter
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.airgap import is_host_allowed_for_airgap
 from app.core.config import settings
+from app.models.llm_credential import TenantLlmCredential
+from app.security.credential_vault import CredentialVaultError, get_vault
 
 router = APIRouter(prefix="/llm", tags=["llm"])
 
@@ -109,31 +134,13 @@ def _is_loopback_or_private_host(host: str) -> bool:
     return False
 
 
-def llm_status() -> dict[str, object]:
-    """Return the live LLM provider snapshot.
+def _env_baseline() -> tuple[str, str, bool]:
+    """Resolve the ``(base_url, model, key_set)`` triple from env vars.
 
-    Shape::
-
-        {
-            "provider": "local-ollama",
-            "model": "llama3.1:8b",
-            "base_url": "http://ollama:11434/v1",
-            "host": "ollama",
-            "key_set": false,
-            "airgap_enabled": true,
-            "airgap_compliant": true,
-            "is_local": true,
-            "effective_path": "live",
-            "policy_note": "...",
-        }
-
-    Notes:
-        * ``base_url`` is returned verbatim (no path-stripping) because
-          operators sometimes encode the model behind the path on
-          single-tenant LiteLLM gateways and stripping it confuses
-          troubleshooting.
-        * ``key_set`` is the *only* signal we expose for the API key.
-          We never return the key itself, even partially redacted.
+    Pulled out of :func:`llm_status` so both the env-only path and the
+    tenant-resolved path start from exactly the same baseline. Returns
+    a tuple rather than a dict so callers can immediately layer
+    overrides on top by name.
     """
     base_url = os.getenv("LLM_BASE_URL") or os.getenv("OPENAI_BASE_URL") or ""
     model = (
@@ -143,6 +150,24 @@ def llm_status() -> dict[str, object]:
         or ""
     )
     key_set = bool(os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY"))
+    return base_url, model, key_set
+
+
+def _compute_status(
+    *,
+    base_url: str,
+    model: str,
+    key_set: bool,
+    source: str,
+) -> dict[str, object]:
+    """Compute the redacted status snapshot for a resolved config triple.
+
+    All classification (``provider``, ``airgap_compliant``, ``is_local``,
+    ``effective_path``, ``policy_note``) happens here so env-only and
+    tenant-resolved paths produce identical-shaped payloads. The
+    ``source`` argument is threaded through to the response so callers
+    can tell where each value came from without re-doing the merge.
+    """
     airgap_enabled = bool(settings.AISOC_AIRGAPPED)
 
     # If neither base_url nor key are set, the operator is running on
@@ -230,17 +255,164 @@ def llm_status() -> dict[str, object]:
         "is_local": is_local,
         "effective_path": effective_path,
         "policy_note": policy_note,
+        "source": source,
     }
+
+
+def llm_status() -> dict[str, object]:
+    """Return the env-only LLM provider snapshot.
+
+    Shape::
+
+        {
+            "provider": "local-ollama",
+            "model": "llama3.1:8b",
+            "base_url": "http://ollama:11434/v1",
+            "host": "ollama",
+            "key_set": false,
+            "airgap_enabled": true,
+            "airgap_compliant": true,
+            "is_local": true,
+            "effective_path": "live",
+            "policy_note": "...",
+            "source": "environment",
+        }
+
+    Notes:
+        * ``base_url`` is returned verbatim (no path-stripping) because
+          operators sometimes encode the model behind the path on
+          single-tenant LiteLLM gateways and stripping it confuses
+          troubleshooting.
+        * ``key_set`` is the *only* signal we expose for the API key.
+          We never return the key itself, even partially redacted.
+        * For tenant-resolved snapshots that layer
+          ``tenant_llm_credentials`` overrides on top of the env
+          baseline, see :func:`tenant_llm_status`.
+    """
+    base_url, model, key_set = _env_baseline()
+    return _compute_status(
+        base_url=base_url,
+        model=model,
+        key_set=key_set,
+        source="environment",
+    )
+
+
+async def tenant_llm_status(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+) -> dict[str, object]:
+    """Return the LLM snapshot with per-tenant BYOK overrides applied.
+
+    Layers values from ``tenant_llm_credentials`` on top of the env
+    baseline. Resolution rules per field:
+
+    * ``base_url``  → tenant value if set, else env baseline.
+    * ``model``     → tenant value if set, else env baseline.
+    * ``key_set``   → ``True`` when the tenant row carries a vault token
+      *or* the env baseline has one. The vault token is decrypted only
+      to validate it, never returned.
+
+    The returned ``source`` field reports the layering result:
+
+    * ``"environment"`` — no tenant row (or row disabled) and at least
+      one env-level value resolved.
+    * ``"tenant"``      — every populated field came from the tenant row.
+    * ``"mixed"``       — the tenant row contributed at least one value
+      but at least one other value still came from the env baseline.
+
+    A disabled tenant row (``enabled = false``) is treated as if it did
+    not exist, matching the behaviour of the agents service.
+    """
+    env_base_url, env_model, env_key_set = _env_baseline()
+
+    row = await db.execute(
+        select(TenantLlmCredential).where(
+            TenantLlmCredential.tenant_id == tenant_id
+        )
+    )
+    cred = row.scalar_one_or_none()
+
+    if cred is None or not cred.enabled:
+        return _compute_status(
+            base_url=env_base_url,
+            model=env_model,
+            key_set=env_key_set,
+            source="environment",
+        )
+
+    # Layer tenant overrides on top of env baseline. Track which fields
+    # the tenant actually contributed so the ``source`` field can
+    # reflect the merge honestly (full tenant vs partial overlay).
+    tenant_contributed = False
+    env_contributed = False
+
+    if cred.base_url:
+        base_url = cred.base_url
+        tenant_contributed = True
+    else:
+        base_url = env_base_url
+        if env_base_url:
+            env_contributed = True
+
+    if cred.model:
+        model = cred.model
+        tenant_contributed = True
+    else:
+        model = env_model
+        if env_model:
+            env_contributed = True
+
+    tenant_key_set = False
+    if cred.api_key_vault:
+        # Validate the vault token decrypts cleanly so we don't claim
+        # ``key_set=True`` for a row whose ciphertext is corrupt or
+        # written under a key we no longer hold. Plaintext is dropped
+        # immediately — never returned, never logged.
+        try:
+            get_vault().decrypt(cred.api_key_vault)
+            tenant_key_set = True
+            tenant_contributed = True
+        except CredentialVaultError:
+            tenant_key_set = False
+
+    if tenant_key_set:
+        key_set = True
+    else:
+        key_set = env_key_set
+        if env_key_set:
+            env_contributed = True
+
+    if tenant_contributed and env_contributed:
+        source = "mixed"
+    elif tenant_contributed:
+        source = "tenant"
+    else:
+        source = "environment"
+
+    return _compute_status(
+        base_url=base_url,
+        model=model,
+        key_set=key_set,
+        source=source,
+    )
 
 
 @router.get("/status", summary="Current LLM provider configuration")
 async def get_llm_status() -> dict[str, object]:
-    """Return the live LLM provider snapshot for this pod.
+    """Return the env-only LLM provider snapshot for this pod.
 
-    The response is safe to surface in operator UIs: secrets are never
-    included (we only return ``key_set: bool``) and the body is
-    deterministic for a given environment so the same payload renders
-    identically across pods. Pair with ``/api/v1/airgap/status`` to
-    show operators a full picture of "where will my AI calls go".
+    Intentionally **unauthenticated** and **env-only**, mirroring
+    ``GET /api/v1/airgap/status``: the response carries no secrets
+    (only ``key_set: bool``) and is safe for operator dashboards,
+    auditors, and k8s liveness probes.
+
+    Tenant-aware callers (the web UI's "Deployment & AI" Settings
+    panel, the agents service's explain path) layer per-tenant BYOK
+    overrides on top of this baseline by either:
+
+    * calling :func:`tenant_llm_status` with their own DB session, or
+    * pairing this response with ``GET /api/v1/llm/credentials`` to
+      perform the merge client-side.
     """
     return llm_status()

@@ -207,6 +207,33 @@ SOC keeps working with degraded output rather than failing closed. See
 `services/api/app/api/v1/endpoints/translation.py`,
 `nl_detection.py`, `nl_query.py`, and `phishing.py` for the pattern.
 
+### BYOK (bring your own key) under air-gap
+
+The same air-gap rule applies to **per-tenant LLM credentials**
+configured via the Settings UI (see
+[Per-tenant LLM credentials (BYOK)](./credentials.md#per-tenant-llm-credentials-byok)).
+Tenant-supplied keys do **not** bypass the egress gate:
+
+- BYOK pointing at a private gateway — `litellm.internal:4000`,
+  `vllm.corp`, `ollama`, `10.0.42.5:8080` — is allowed under
+  `AISOC_AIRGAPPED=true` because the host classifies as private.
+- BYOK pointing at `api.openai.com`, `api.anthropic.com`, or any
+  other public host is **blocked** at request time even if the
+  tenant row has a valid encrypted key. The agents service logs
+  `airgap.block` and `resolve_llm_config` returns
+  `allowed=false` with a deterministic reason.
+
+This is enforced inside `services/agents/app/security/llm_resolver.py`:
+`_airgap_blocks(host)` is consulted *after* the tenant override is
+layered over the env baseline, so a tenant cannot punch through the
+operator's air-gap policy by saving a public OpenAI key into their
+own row.
+
+If a tenant *should* be allowed to call a specific public host (e.g.
+a customer-managed Azure OpenAI deployment under a corporate domain),
+add that host to `AISOC_AIRGAP_ALLOWLIST` at the operator level — BYOK
+respects the same allowlist.
+
 ## Plugging in a local threat-intel mirror
 
 The threat-intel service ships clients for AlienVault OTX, CISA KEV,
