@@ -28,6 +28,9 @@ const OSQUERY_TLS_HOST = process.env.OSQUERY_TLS_URL || 'http://localhost:8090';
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@aisoc/ui', '@aisoc/types'],
+  turbopack: {
+    root: __dirname,
+  },
   // Mock data in views uses shapes that diverge from the strict typed API
   // contracts. We rely on per-package type-checks (pnpm --filter <pkg> tsc)
   // for correctness; during the production build we skip Next.js's strict
@@ -35,9 +38,6 @@ const nextConfig = {
   // type change. Real API responses are validated at runtime.
   typescript: {
     ignoreBuildErrors: true,
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
   },
   // ─── Client-side env (baked into the JS bundle at build time) ────────────
   //

@@ -5,6 +5,48 @@ All notable changes to AiSOC will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [7.0.1] — 2026-05-10
+
+### Fixed — Web app hardening: CodeQL, hydration, Turbopack config
+
+#### Security (CodeQL Code-Scanning — 42 alerts cleared)
+
+- **Python**: Resolved `py/unused-global-variable` in `credential_vault.py`,
+  `pack_loader.py`, `executive_digest.py`, `case_summary.py`,
+  `cost_dashboard.py`, and `actions/executors/base.py` by refactoring mutable
+  state into dictionaries and exposing identifiers via `__all__`.
+- **Python**: Resolved `py/cyclic-import` between `osquery-tls` modules by
+  extracting `generate_node_key` into a new `app/core/crypto.py` module.
+- **Python**: Resolved `py/empty-except` in `api/main.py` and `api/services/github.py`
+  by replacing bare `pass` blocks with `logger.debug` calls.
+- **Python**: Resolved `py/log-injection` in `github.py`, `detection_proposals.py`,
+  and `llm_credentials.py` by switching log format specifiers to `%r`.
+- **Python**: Resolved `py/clear-text-logging-sensitive-data` in
+  `workers/oauth_refresh.py` by redacting `tenant_id` and sanitising reason strings.
+- **Python**: Resolved `py/incomplete-url-substring-sanitization` in
+  `llm_resolver.py` by using `urllib.parse.urlparse` for hostname extraction.
+- **Python**: Resolved `py/stack-trace-exposure` in `agents/api/explain.py` by
+  returning a generic error string from the exception handler.
+- **Python**: Resolved `py/call/wrong-arguments` in `agents/tests/smoke_explain.py`
+  by importing and passing a `LlmConfig` instance to `_stream_explanation`.
+- **Python**: Resolved `py/unused-import` in `osquery-tls/db/env.py`; fixed
+  `E402` (import ordering) in the same file.
+- **JavaScript**: Resolved `js/unused-local-variable` in `AlertsView.tsx`
+  (removed unused `toast` import) and `SettingsView.byok.test.tsx` (removed
+  unused `within` import).
+
+#### Web app (`apps/web/`)
+
+- **`next.config.js`**: Removed deprecated `eslint.ignoreDuringBuilds` key that
+  Next.js 16 no longer accepts in the config file; added `turbopack.root` so
+  Turbopack resolves workspace packages correctly.
+- **`src/app/layout.tsx`**: Added `suppressHydrationWarning` to the `<html>`
+  element so that the render-blocking `themeBootstrapScript` can freely write
+  `data-theme`, `data-theme-preference`, and `style.colorScheme` on the client
+  without React reporting a hydration mismatch on every page load.
+
+---
+
 ## [7.0.0] — 2026-05-10
 
 ### Added — v1.0 Buyer-Value Plan: ChatOps, Digest PDF, BYOK, Air-gap, WCAG AA, Analytics

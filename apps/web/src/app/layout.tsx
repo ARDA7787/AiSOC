@@ -174,6 +174,7 @@ export default function RootLayout({
       lang="en"
       data-theme="dark"
       className={`${inter.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
     >
       <body className="bg-surface-base text-fg-primary antialiased">
         <script
