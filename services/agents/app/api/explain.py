@@ -32,6 +32,37 @@ When the LLM path is skipped, the deterministic synthesizer fills the
 ``summary`` section from the alert payload itself, so the demo path
 never breaks.
 
+Rate limiting
+-------------
+
+Every explain request can fan out to one outbound LLM call, so a noisy
+client (or a hostile script hammering Explain across every alert in
+the grid) would burn token budget and stall every other analyst's
+drawer behind queued LLM calls. We use a per-tenant token bucket
+(``services/agents/app/core/rate_limit.py``):
+
+* ``AISOC_EXPLAIN_BURST`` — bucket capacity (default 20)
+* ``AISOC_EXPLAIN_RPM``   — refill, requests per minute (default 60).
+                            Set to ``0`` to disable the limiter
+                            entirely (used in tests and demos).
+
+When the bucket is empty we return HTTP 429 with ``Retry-After`` and
+the standard ``X-RateLimit-*`` headers, *and* emit a single NDJSON
+``error`` frame so an EventSource-style client that has already
+started reading still gets a structured failure to render.
+
+BYOK / per-tenant LLM overrides
+-------------------------------
+
+Per-tenant API-key overrides (Bring-Your-Own-Key) are explicitly
+deferred to v1.1 — the live snapshot is documented in
+``services/api/app/api/v1/endpoints/llm_status.py``. v1 honours a
+single process-wide configuration (``OPENAI_API_KEY`` /
+``OPENAI_BASE_URL`` / ``AISOC_AIRGAPPED``) so we don't ship a half-
+finished credential model that we'd later need to migrate. Tenant ID
+is still recorded on every request so the v1.1 cutover is purely a
+code change, not a data migration.
+
 NDJSON frame shapes
 -------------------
 
@@ -69,13 +100,80 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import structlog
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+
+from app.core.rate_limit import RateLimitDecision, TokenBucketLimiter
 
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/api/v1", tags=["explain"])
+
+
+# ---------------------------------------------------------------------------
+# Rate limiter (per-tenant token bucket)
+# ---------------------------------------------------------------------------
+#
+# Lazy-initialised at first request so the env vars can be patched per-test
+# without paying the cost of touching ``time.monotonic`` at import time.
+# A value of 0 for ``AISOC_EXPLAIN_RPM`` short-circuits the limiter
+# entirely — useful for the deterministic eval harness, where we want to
+# stream the same 200 incidents back-to-back without throttling noise.
+
+_DEFAULT_BURST = 20
+_DEFAULT_RPM = 60
+
+_explain_limiter: TokenBucketLimiter | None = None
+
+
+def _get_explain_limiter() -> TokenBucketLimiter | None:
+    """Return the process-wide explain limiter, or ``None`` if disabled.
+
+    We re-read the env vars only on first construction; subsequent
+    calls return the cached singleton. Tests that need a fresh
+    limiter call :func:`_reset_explain_limiter` first.
+    """
+    global _explain_limiter
+    if _explain_limiter is not None:
+        return _explain_limiter
+    try:
+        rpm = int(os.environ.get("AISOC_EXPLAIN_RPM", _DEFAULT_RPM))
+        burst = int(os.environ.get("AISOC_EXPLAIN_BURST", _DEFAULT_BURST))
+    except ValueError:
+        rpm, burst = _DEFAULT_RPM, _DEFAULT_BURST
+    if rpm <= 0 or burst <= 0:
+        return None
+    _explain_limiter = TokenBucketLimiter(
+        capacity=float(burst),
+        refill_per_second=rpm / 60.0,
+    )
+    return _explain_limiter
+
+
+def _reset_explain_limiter() -> None:
+    """Drop the cached limiter — used by tests to pick up env changes."""
+    global _explain_limiter
+    _explain_limiter = None
+
+
+def _rate_limit_key(req: ExplainRequest, request: Request | None) -> str:
+    """Compose the bucket key for a request.
+
+    Prefer the body-supplied tenant_id (fairness across analysts on
+    the same tenant), fall back to client IP (hygiene against
+    unauthenticated abuse). The agents service runs behind a reverse
+    proxy in production, but ``request.client.host`` is good enough
+    for in-process throttling — proxy spoofing only changes which
+    bucket gets drained, never lets a caller bypass the bucket.
+    """
+    tenant = (req.tenant_id or "").strip()
+    if tenant and tenant != "default":
+        return f"tenant:{tenant}"
+    ip = "unknown"
+    if request is not None and request.client is not None:
+        ip = request.client.host or "unknown"
+    return f"ip:{ip}"
 
 
 # ---------------------------------------------------------------------------
@@ -591,9 +689,48 @@ async def _stream_explanation(req: ExplainRequest) -> AsyncIterator[bytes]:
 
 
 @router.post("/explain")
-async def explain(req: ExplainRequest) -> StreamingResponse:
-    """Stream an OCSF + MITRE-grounded explanation of an alert as NDJSON."""
+async def explain(req: ExplainRequest, request: Request) -> StreamingResponse:
+    """Stream an OCSF + MITRE-grounded explanation of an alert as NDJSON.
+
+    Each request consumes one token from a per-tenant bucket (see the
+    "Rate limiting" section in the module docstring). When the bucket
+    is empty we return HTTP 429 — *not* a 200 with an error frame —
+    so generic HTTP clients and reverse proxies see a real
+    throttle. The body is still NDJSON so an SSE/EventSource client
+    that ignores status codes still gets a structured failure.
+    """
+    limiter = _get_explain_limiter()
+    decision: RateLimitDecision | None = None
+    if limiter is not None:
+        key = _rate_limit_key(req, request)
+        decision = await limiter.acquire(key)
+        if not decision.allowed:
+            logger.info(
+                "explain.rate_limited",
+                key=key,
+                retry_after=decision.retry_after_seconds,
+                remaining=decision.remaining,
+            )
+            headers = decision.to_headers()
+            body = _frame(
+                {
+                    "kind": "error",
+                    "error": (
+                        "rate_limited: too many explain requests for this tenant; "
+                        f"retry after ~{int(decision.retry_after_seconds + 0.999)}s"
+                    ),
+                }
+            )
+            return StreamingResponse(
+                iter([body]),
+                media_type="application/x-ndjson",
+                status_code=429,
+                headers=headers,
+            )
+
+    response_headers = decision.to_headers() if decision is not None else None
     return StreamingResponse(
         _stream_explanation(req),
         media_type="application/x-ndjson",
+        headers=response_headers,
     )
