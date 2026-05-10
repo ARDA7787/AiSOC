@@ -53,6 +53,7 @@ from app.api.v1.endpoints import (
     rbac,
     remediation,
     reports,
+    saved_views,
     shifts,
     sla,
     stix_taxii,
@@ -102,6 +103,12 @@ api_router.include_router(push.router)
 api_router.include_router(oncall.router)
 api_router.include_router(approvals.router)
 api_router.include_router(passkeys.router)
+
+# Per-user saved views — WS-F3 (analyst quality-of-life).
+# Backs the saved-views menu on Alerts/Cases/Investigations/Playbooks
+# list pages. Per-user-per-tenant CRUD; tenant scoping via RLS, user
+# scoping in the API layer (every query filters on user_id).
+api_router.include_router(saved_views.router)
 
 # Wave 3 — operational maturity
 api_router.include_router(assets.router)

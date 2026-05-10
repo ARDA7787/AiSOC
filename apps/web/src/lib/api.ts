@@ -3667,6 +3667,91 @@ function timestampSlug(): string {
   );
 }
 
+// ─── Saved views (per-user filter + column presets) ──────────────────────────
+//
+// Workstream F3 — analyst quality-of-life. Lets each user park a filter +
+// column preset on a list page (alerts, cases, investigations, playbooks)
+// and reload it with one click. One preset per ``(user, view_type)`` can be
+// flagged ``is_default``; the UI auto-applies it on first load.
+//
+// The wire format mirrors ``services/api/app/api/v1/endpoints/saved_views.py``
+// 1:1: opaque ``filters`` and ``columns`` blobs are owned by the page
+// rendering them, so callers cast to whatever shape they need (e.g.
+// ``AlertFilters`` for the alerts page) without round-tripping through this
+// type. That keeps the saved-views API a *generic* preset store rather than
+// a tight coupling between every list page and this client.
+
+/** Pages that support saved views — must match the backend allowlist. */
+export type SavedViewType =
+  | 'alerts'
+  | 'cases'
+  | 'investigations'
+  | 'playbooks';
+
+/** A saved-view row as returned by the API. */
+export interface SavedView {
+  id: string;
+  view_type: SavedViewType;
+  name: string;
+  /** Page-specific filter blob — opaque to this client. */
+  filters: Record<string, unknown>;
+  /** Optional column override. ``null`` means "use page defaults". */
+  columns: unknown[] | Record<string, unknown> | null;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Body for ``POST /saved-views``. */
+export interface SavedViewCreateRequest {
+  view_type: SavedViewType;
+  name: string;
+  filters?: Record<string, unknown>;
+  columns?: unknown[] | Record<string, unknown> | null;
+  is_default?: boolean;
+}
+
+/** Body for ``PATCH /saved-views/{id}`` — every field is optional. */
+export interface SavedViewUpdateRequest {
+  name?: string;
+  filters?: Record<string, unknown>;
+  /** Pass ``null`` to clear a previously-saved column override. */
+  columns?: unknown[] | Record<string, unknown> | null;
+  is_default?: boolean;
+}
+
+export const savedViewsApi = {
+  /**
+   * List the caller's presets for one list page. Sorted by
+   * ``is_default DESC, updated_at DESC`` server-side, so the default
+   * preset (if any) lands first.
+   */
+  list: (viewType: SavedViewType) =>
+    request<SavedView[]>('/api/v1/saved-views', {
+      params: { view_type: viewType },
+    }),
+
+  /** Create a new preset. Returns the freshly-stamped row. */
+  create: (payload: SavedViewCreateRequest) =>
+    request<SavedView>('/api/v1/saved-views', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  /** Patch a preset in place — rename, retune filters, toggle default. */
+  update: (id: string, payload: SavedViewUpdateRequest) =>
+    request<SavedView>(`/api/v1/saved-views/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+
+  /** Delete a preset. Returns ``{}`` on the 204 response. */
+  delete: (id: string) =>
+    request<Record<string, never>>(`/api/v1/saved-views/${id}`, {
+      method: 'DELETE',
+    }),
+};
+
 // ─── Realtime / WebSocket helpers ────────────────────────────────────────────
 
 export const realtimeApi = {
@@ -3712,4 +3797,5 @@ export default {
   deployment: deploymentApi,
   reports: reportsApi,
   costs: costsApi,
+  savedViews: savedViewsApi,
 };

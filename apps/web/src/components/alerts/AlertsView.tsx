@@ -10,6 +10,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { EntityRiskQueue } from './EntityRiskQueue';
 import { EmptyState, EmptyStateIcons } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { SavedViewsBar } from '@/components/saved-views/SavedViewsBar';
 
 // Wave 1 of the AiSOC v6 capability roadmap. The "entities" tab renders the
 // rolled-up Risk-Based Alerting queue — alerts contribute time-decayed risk
@@ -364,6 +365,24 @@ function AlertsTable({
           </div>
         ))}
       </div>
+
+      {/*
+        WS-F3 — saved views. The bar reads/writes filters straight through
+        ``onFilterChange`` so we don't need a parallel state path. We reset
+        ``page`` to 1 when applying a preset because saved pagination would
+        be confusing — analysts expect to start from the top.
+      */}
+      <SavedViewsBar<AlertFilters>
+        viewType="alerts"
+        filters={filters}
+        onApply={(applied) =>
+          onFilterChange({
+            ...applied,
+            page: 1,
+            pageSize: filters.pageSize ?? 25,
+          })
+        }
+      />
 
       <FiltersBar filters={filters} onChange={onFilterChange} total={total} />
 

@@ -8,6 +8,17 @@ import { casesApi, type Case, type CasesResponse } from '@/lib/api';
 import { clsx } from 'clsx';
 import { format } from 'date-fns';
 import { EmptyState, EmptyStateIcons } from '@/components/ui/EmptyState';
+import { SavedViewsBar } from '@/components/saved-views/SavedViewsBar';
+
+// WS-F3 — the saved-views API stores an opaque filter blob per view, so we
+// flatten the three filter slices Cases tracks today into a single shape the
+// bar can snapshot and replay. Nothing else in the view consumes this — it's
+// purely the wire format between the bar and the local state setters.
+type CaseFilterSnapshot = {
+  status: Case['status'] | 'all';
+  severity: Case['severity'] | 'all';
+  search: string;
+};
 
 // ─── Mock Data ────────────────────────────────────────────────────────────────
 
@@ -211,6 +222,26 @@ export function CasesView({ initialCases }: CasesViewProps = {}) {
           );
         })}
       </div>
+
+      {/*
+        WS-F3 — saved views. Cases keeps three slices of filter state, so we
+        synthesize a single object for the bar and unpack it on apply. We
+        spread defaults to be defensive against older saved-view payloads
+        that might be missing newer keys.
+      */}
+      <SavedViewsBar<CaseFilterSnapshot>
+        viewType="cases"
+        filters={{
+          status: statusFilter,
+          severity: severityFilter,
+          search,
+        }}
+        onApply={(applied) => {
+          setStatusFilter(applied.status ?? 'all');
+          setSeverityFilter(applied.severity ?? 'all');
+          setSearch(applied.search ?? '');
+        }}
+      />
 
       {/* Filters */}
       <div className="flex items-center gap-3">
