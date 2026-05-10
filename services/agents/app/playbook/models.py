@@ -21,6 +21,7 @@ class StepType(str, Enum):
     CLOSE_CASE = "close_case"
     HTTP = "http"  # Generic outbound HTTP call
     CONDITION = "condition"  # Branching / gate
+    OSQUERY_LIVE_QUERY = "osquery_live_query"  # Distributed osquery via osctrl/FleetDM/aisoc-direct
 
 
 class StepCondition(BaseModel):

@@ -210,6 +210,92 @@ async def _handle_close_case(step: PlaybookStep, context: dict[str, Any], http: 
     return {"case_id": case_id, "status": "closed"}
 
 
+async def _handle_osquery_live_query(
+    step: PlaybookStep, context: dict[str, Any], http: httpx.AsyncClient
+) -> dict:
+    """Dispatch a distributed osquery live query via osctrl, FleetDM, or aisoc-direct.
+
+    Expected ``step.params`` keys
+    ------------------------------
+    backend : str
+        One of ``"osctrl"``, ``"fleetdm"``, ``"aisoc_direct"``.
+    instance_id : str
+        Connector instance ID (looked up from the API to retrieve credentials).
+    target_hosts : list[str]
+        Host UUIDs / hostnames to query.
+    template : str
+        Allowlist template ID (see ``osquery_allowlist``).
+    template_params : dict, optional
+        Parameters forwarded to the template renderer.
+    timeout_seconds : int, optional
+        How long to wait for all hosts to respond (default: 60).
+    """
+    # Import clients here to avoid circular imports at module load time.
+    from app.clients.aisoc_direct_client import AiSOCDirectClient  # noqa: PLC0415
+    from app.clients.fleetdm_client import FleetDMClient  # noqa: PLC0415
+    from app.clients.osctrl_client import OsctrlClient  # noqa: PLC0415
+    from app.clients.osquery_allowlist import AllowlistError  # noqa: PLC0415
+
+    backend: str = step.params.get("backend", "osctrl")
+    target_hosts: list[str] = step.params.get("target_hosts") or [
+        context.get("host_id") or context.get("host", "")
+    ]
+    template: str = step.params.get("template", "")
+    template_params: dict[str, Any] = step.params.get("template_params") or {}
+    timeout_seconds: int = step.params.get("timeout_seconds", 60)
+
+    if not template:
+        return {"error": "osquery_live_query: 'template' param is required", "partial": True}
+
+    # Credential resolution: fetch the connector instance config from the API.
+    instance_id: str = step.params.get("instance_id") or context.get("connector_instance_id", "")
+    creds: dict[str, Any] = {}
+    if instance_id:
+        try:
+            r = await http.get(
+                f"{_API_URL}/api/v1/connectors/instances/{instance_id}",
+                timeout=10,
+            )
+            if r.status_code == 200:
+                creds = r.json().get("auth_config") or {}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not fetch connector creds for %s: %s", instance_id, exc)
+
+    try:
+        if backend == "osctrl":
+            client = OsctrlClient(
+                base_url=creds.get("base_url") or step.params.get("base_url", ""),
+                environment=creds.get("environment") or step.params.get("environment", "default"),
+                api_token=creds.get("api_token") or step.params.get("api_token", ""),
+                verify_tls=step.params.get("verify_tls", True),
+            )
+            return await client.live_query(target_hosts, template, template_params, timeout_seconds)
+
+        if backend == "fleetdm":
+            client_fleet = FleetDMClient(
+                base_url=creds.get("base_url") or step.params.get("base_url", ""),
+                api_token=creds.get("api_token") or step.params.get("api_token") or None,
+                username=creds.get("username") or step.params.get("username") or None,
+                password=creds.get("password") or step.params.get("password") or None,
+                verify_tls=step.params.get("verify_tls", True),
+            )
+            return await client_fleet.live_query(target_hosts, template, template_params, timeout_seconds)
+
+        if backend == "aisoc_direct":
+            client_direct = AiSOCDirectClient(
+                base_url=creds.get("base_url") or step.params.get("base_url", ""),
+                api_token=creds.get("api_token") or step.params.get("api_token", ""),
+            )
+            return await client_direct.live_query(target_hosts, template, template_params, timeout_seconds)
+
+        return {"error": f"Unknown osquery backend: {backend!r}", "partial": True}
+
+    except AllowlistError as exc:
+        return {"error": f"osquery allowlist violation: {exc}", "partial": True}
+    except NotImplementedError as exc:
+        return {"error": str(exc), "partial": True, "stub": True}
+
+
 _HANDLERS = {
     StepType.ENRICH: _handle_enrich,
     StepType.INVESTIGATE: _handle_investigate,
@@ -219,6 +305,7 @@ _HANDLERS = {
     StepType.ISOLATE_HOST: _handle_isolate_host,
     StepType.CREATE_TICKET: _handle_create_ticket,
     StepType.CLOSE_CASE: _handle_close_case,
+    StepType.OSQUERY_LIVE_QUERY: _handle_osquery_live_query,
 }
 
 

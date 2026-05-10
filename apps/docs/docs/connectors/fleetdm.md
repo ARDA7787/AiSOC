@@ -85,3 +85,69 @@ Identical table-driven mapping as the [osctrl connector](/docs/connectors/osctrl
 
 - [osctrl](/docs/connectors/osctrl) — alternative open-source fleet manager.
 - [Detection coverage](/docs/detections/coverage) — endpoint rules that fire on osquery data.
+
+## Live-query response actions (playbook step)
+
+The `osquery_live_query` playbook step supports FleetDM as a backend,
+dispatching live campaigns via Fleet's distributed-query API.
+
+### Playbook step schema
+
+```yaml
+- id: triage-logged-users
+  name: "Get logged-in users from affected host"
+  type: osquery_live_query
+  params:
+    backend: fleetdm
+    base_url: "https://fleet.corp.example.com"
+    api_token: "{{ secrets.fleetdm_token }}"   # or use username/password below
+    # username: admin
+    # password: "{{ secrets.fleetdm_password }}"
+    template: logged_in_users
+    target_hosts:
+      - "{{ alert.host }}"
+    timeout_seconds: 60
+```
+
+### Authentication
+
+FleetDM supports two credential modes:
+
+| Mode | Params |
+|---|---|
+| API token | `api_token` |
+| User / password | `username` + `password` (token fetched automatically via `/api/v1/fleet/login`) |
+
+The client will authenticate on first use and reuse the token for the duration
+of the step.
+
+### Supported templates
+
+Same allowlist as the osctrl backend — see the
+[osctrl connector](/docs/connectors/osctrl#supported-templates) for the full
+table. Templates are backend-agnostic; only the `backend:` key selects the
+fleet manager.
+
+### Result shape
+
+```json
+{
+  "results": {
+    "hostname-a": [{"user": "root", "type": "user", "host": "hostname-a"}]
+  },
+  "partial": false,
+  "timed_out_hosts": []
+}
+```
+
+### When to choose FleetDM vs osctrl
+
+| Concern | FleetDM | osctrl |
+|---|---|---|
+| Community / ecosystem | Larger | Smaller |
+| Multi-tenant isolation | Teams (paid tier for strict isolation) | Native environments (OSS) |
+| Infra footprint | MySQL + Redis | PostgreSQL only |
+| AiSOC stack alignment | Needs extra deps | Native fit |
+
+Both backends are fully supported — choose based on your existing fleet
+management deployment.

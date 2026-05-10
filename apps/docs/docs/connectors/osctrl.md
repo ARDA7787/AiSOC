@@ -86,3 +86,64 @@ the defaults stable so detection authors have a predictable substrate.
 
 - [FleetDM](/docs/connectors/fleetdm) — alternative osquery fleet manager with a similar event shape.
 - [Detection coverage](/docs/detections/coverage) — endpoint rules that fire on osquery data.
+
+## Live-query response actions (playbook step)
+
+The `osquery_live_query` playbook step dispatches an on-demand osquery
+distributed query to one or more hosts via osctrl's distributed-query API.
+Responses are polled and returned as structured rows, enabling IR triage
+("get all running processes on this host right now") directly inside
+AiSOC playbooks.
+
+### Playbook step schema
+
+```yaml
+- id: triage-running-procs
+  name: "Get running processes from affected host"
+  type: osquery_live_query
+  params:
+    backend: osctrl
+    base_url: "https://osctrl.corp.example.com"
+    environment: production          # osctrl environment name
+    api_token: "{{ secrets.osctrl_token }}"
+    template: running_processes      # must be an approved allowlist template
+    template_params:
+      limit: 100
+    target_hosts:
+      - "{{ alert.host }}"
+    timeout_seconds: 60              # optional, default 60
+```
+
+### Supported templates
+
+| Template | SQL intent |
+|---|---|
+| `running_processes` | `SELECT * FROM processes LIMIT :limit` |
+| `active_connections` | `SELECT * FROM process_open_sockets WHERE state='ESTABLISHED'` |
+| `logged_in_users` | `SELECT * FROM logged_in_users` |
+| `recently_modified_files` | `SELECT * FROM file WHERE path LIKE '/tmp/%' AND mtime > :since` |
+| `listening_ports` | `SELECT * FROM listening_ports` |
+
+Only templates in the allowlist can be executed — raw SQL injection is rejected
+at the `AllowlistError` boundary before any network call is made.
+
+### Result shape
+
+```json
+{
+  "results": {
+    "hostname-a": [{"pid": "1234", "name": "bash", "cmdline": "..."}],
+    "hostname-b": []
+  },
+  "partial": false,
+  "timed_out_hosts": []
+}
+```
+
+`partial: true` is set when at least one target host did not respond within
+`timeout_seconds`.
+
+### Credentials
+
+Store the osctrl API token in the AiSOC secrets store and reference it with
+`{{ secrets.osctrl_token }}` in the playbook YAML. Never hard-code tokens.
