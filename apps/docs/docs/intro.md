@@ -41,7 +41,13 @@ public, reproducible eval harness on every PR targeting `main` / `develop`.
 - **Hunt-as-Code** — YAML hunt definitions in `hunts/` with hypothesis, indicator matching (equals/in/regex/gte/lte/exists/contains_any/iendswith), and APScheduler-driven continuous execution. Results flow to Postgres via the Hunt API.
 - **Risk-Based Alerting (RBA)** — alerts contribute time-decayed risk points to entities (user, host, IP, domain). When an entity's score crosses a configurable threshold, AiSOC promotes it to an incident with contributing alerts attached.
 - **Federated search** — translate a single query into SPL, KQL, and ES|QL and fan out to connected SIEMs. Results are merged and deduplicated.
+- **Slack ChatOps bot** — dedicated `aisoc` slash commands (`/aisoc triage`, `/aisoc approve`, `/aisoc status`, `/aisoc summary`) with interactive approval buttons and HMAC-signed callbacks. Human-in-the-loop triage without opening the console. (`services/slack-bot/`)
 - **ChatOps verification** — Slack/Teams interactive prompts with HMAC-signed callback choices (acknowledge / deny / escalate) for human-in-the-loop response actions.
+- **AI executive digest PDF** — branded A4 PDF with KPI tiles, alert-volume chart, top-rule table, and remediation summary, auto-emailed Monday 06:00 UTC via APScheduler. (`services/api/app/services/digest_pdf.py`)
+- **Threat actor attribution engine** — per-alert actor attribution with MITRE Group mapping, confidence scoring, Diamond Model labeling, and campaign clustering. (`services/threatintel/app/actors/attribution.py`)
+- **Air-gap / local-LLM mode** — run AiSOC with zero outbound HTTP using Ollama, LiteLLM, or vLLM via a single env-var toggle and a Docker Compose overlay. ([Air-gapped mode](./operations/air-gapped))
+- **BYOK — Bring Your Own LLM key** — per-tenant LLM credential management (API key, base URL, model) stored encrypted in `CredentialVault`; configurable from the Settings UI. ([Credentials](./operations/credentials))
+- **Saved views & drag-drop dashboard widgets** — analysts save custom alert filter presets and rearrange dashboard widgets; persisted per-user in Postgres.
 - **Playbook engine** — 50+ community SOAR playbooks with explicit decision trees and human-approval gates on destructive actions.
 - **Threat intelligence** — TAXII 2.1, MISP, OTX, CISA KEV with triple storage (search, vector, graph).
 - **Governance** — SAML 2.0 + OIDC SSO, multi-tenant RLS, granular RBAC, immutable audit log.

@@ -658,3 +658,24 @@ Documentation:
   enumerates LLM keys alongside connector secrets.
 
 Workspace rule: do not stop until every todo is done.
+
+---
+
+## v1.0 Buyer-Value Plan — COMPLETE (2026-05-10)
+
+Author: Beenu Arora <beenu@cyble.com>
+Released as: **v7.0.0** on `main` branch.
+
+All workstreams from `aisoc_v1.0_—_buyer-value_plan_c8116970.plan.md` are
+now shipped and verified. See `PROGRESS.md` for the full workstream table,
+fix log, and documentation changes.
+
+PR #43 (`feat/threatintel-attribution-v0-fixed`) was squash-merged into
+`main` on 2026-05-10 (205 files changed, +16 524 / -1 961 lines).
+
+CHANGELOG promoted to `[7.0.0] — 2026-05-10`.
+ROADMAP v7.0 marked Shipped ✅; v8.0 Planned section added.
+README version badge updated to `7.0.0`.
+
+The AI Stack & Data Integration plan workstreams (this file) remain at
+DONE status — no regressions introduced by the v7.0 buyer-value plan.

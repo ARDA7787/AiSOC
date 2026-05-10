@@ -5,7 +5,169 @@ All notable changes to AiSOC will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [7.0.0] — 2026-05-10
+
+### Added — v1.0 Buyer-Value Plan: ChatOps, Digest PDF, BYOK, Air-gap, WCAG AA, Analytics
+
+This release ships the complete v1.0 buyer-value plan across 16 workstreams.
+All items were designed, implemented, tested, and reviewed by
+Beenu Arora <beenu@cyble.com>.
+
+#### WS-A1 — Slack ChatOps Bot (`services/slack-bot/`)
+
+- **`services/slack-bot/`** — New standalone FastAPI service using `slack-bolt`
+  async adapter. Ships `/aisoc triage <case_id>`, `/aisoc approve <action_id>`,
+  `/aisoc status <case_id>`, and `/aisoc summary <case_id>` slash commands.
+  Interactive approval buttons route back through the API approval endpoint so
+  human-in-the-loop gates work from Slack without opening the console.
+- 61 pytest cases cover the slash-command handlers, interactive payloads, API
+  client calls, and error paths (bad token, non-200 API response, missing case).
+
+#### WS-B1/B2 — Executive Digest PDF + Weekly Scheduler
+
+- **`services/api/app/services/digest_pdf.py`** — Generates a branded A4 PDF
+  for `ExecutiveDigest` objects using ReportLab. Includes cover page, KPI tiles,
+  alert-volume chart, top-rule table, top-actor table, and remediation summary.
+- **`services/api/app/workers/weekly_digest_task.py`** — APScheduler task that
+  runs every Monday at 06:00 UTC, builds a digest for every active tenant, and
+  delivers it via `POST /api/v1/reports/digest/email` or writes it to blob
+  storage. Controlled by `DIGEST_SCHEDULE_ENABLED` env flag.
+- **`services/api/app/services/digest_html.py`** — HTML mirror of the PDF for
+  in-browser preview.
+- **`services/api/tests/test_digest_pdf.py`** — 12 pytest cases covering PDF
+  generation, chart rendering, and weekly scheduler triggering.
+
+#### WS-C1/C2/C3 — Playbook Gallery, Detection Proposals, GitHub PR Integration
+
+- **`apps/web/src/components/playbooks/PlaybooksGallery.tsx`** — Tabbed gallery
+  with 12 curated packs (Phishing, Ransomware, BEC, IAM Key Compromise, …).
+  Each card shows TTP coverage badges, author, version, and a one-click
+  **Import** button that calls `POST /api/v1/playbooks/import`.
+- **`services/api/migrations/039_detection_proposal_github_pr.sql`** —
+  Adds `github_pr_url TEXT` and `github_pr_number INT` to `detection_proposals`.
+- **`services/api/app/services/github.py`** — `GitHubService` creates draft PRs
+  against the tenant's detection repo when a detection proposal is promoted.
+  Supports GHES and github.com via `GITHUB_API_URL` env var.
+- 25 playbook YAML templates added under `detections/playbooks/` and 12 pre-built
+  playbook packs under `playbooks/packs/v1/`.
+
+#### WS-D1 — BYOK Per-Tenant Settings UI
+
+- **`apps/web/src/components/settings/SettingsView.tsx`** — New "AI / LLM"
+  settings panel: provider picker (OpenAI, Azure OpenAI, Anthropic, Ollama),
+  API-key input, model selector, temperature slider, and connection test button.
+- **`apps/web/src/components/settings/SettingsView.byok.test.tsx`** — 12 Vitest
+  tests covering form rendering, provider switching, key masking, connection test
+  success/error paths, and save confirmation.
+
+#### WS-D2 — Investigation Timeline (Replayable)
+
+- **`apps/web/src/components/copilot/InvestigationTimeline.tsx`** — 684-line
+  React component that renders the investigation ledger as a playable timeline.
+  Each step shows the agent name, tool call, rationale, duration, and status
+  badge. A scrubber lets analysts replay from any step.
+
+#### WS-D3 — Case Auto-Summary + PDF Export
+
+- **`services/api/app/services/case_summary.py`** — LLM-powered case summariser
+  (structured output via function-calling). Produces `CaseSummaryResult` with
+  `headline`, `severity_rationale`, `recommended_action`, and `evidence_links`.
+- **`services/api/app/services/case_summary_html.py`** — HTML renderer for the
+  summary, used by the PDF exporter and the in-browser case card.
+
+#### WS-F1 — Light Theme Persisted in User Profile
+
+- **`apps/web/src/components/theme/ThemeProvider.tsx`** — Theme preference
+  (`light` | `dark` | `system`) stored in `localStorage` and synced to
+  `PATCH /api/v1/users/me/preferences`. Survives logout and device switch.
+
+#### WS-F2 — WCAG AA Accessibility (axe-core CI gate)
+
+- **`apps/web/src/test/a11y.test.tsx`** — 55-line axe-core test suite. Renders
+  `AlertsView`, `CasesView`, `PlaybooksView`, `DashboardView`, and 3 modal
+  components; fails the build if any WCAG 2.1 AA violation is found.
+- Sidebar landmark roles, ARIA labels, focus trapping in modals, skip-navigation
+  link, and colour-contrast fixes applied across the entire component tree.
+
+#### WS-F3 — Saved Views + Drag-Drop Dashboard Widgets
+
+- **`apps/web/src/components/dashboard/DashboardView.tsx`** — Dashboard is now
+  fully composable: widgets can be dragged, dropped, resized, pinned, and
+  removed. Layout serialised to `POST /api/v1/saved-views`.
+- **`services/api/app/api/v1/endpoints/saved_views.py`** — CRUD for per-user
+  saved views (dashboard layout, column configs, active filters).
+
+#### WS-G1/G2 — Threat Actor Attribution Engine v0 + Air-Gap Mode
+
+- **`services/threatintel/app/actors/attribution.py`** — New
+  `ThreatActorAttributionEngine` scores observed IOCs, MITRE ATT&CK
+  techniques, tools, and target sectors against an in-memory catalog of
+  three seed actor profiles (APT28, APT29, Lazarus). Scoring is the
+  weighted sum of TTP (0.4) / Tool (0.3) / Target (0.2) / IOC (0.1)
+  components, multiplied by the actor profile's baseline confidence,
+  then thresholded.
+- **`services/threatintel/app/api/actor_attribution.py`** — New router
+  mounted at `/api/v1/actors` with `POST /attribute`, `GET /profiles`,
+  and `GET /profiles/{actor_id}`. Constructs the engine once via
+  FastAPI lifespan and passes it through `Depends(get_attribution_engine)`.
+- **`services/agents/app/agents/investigation_agent.py`** — Investigation
+  agent now calls `POST /actors/attribute` and surfaces attribution results
+  in the investigation ledger.
+- **`docker-compose.airgap.yml`** — Compose override for fully disconnected
+  deployments: disables all external feed pullers, enables Ollama sidecar, and
+  sets `AIRGAP_MODE=true` so the API switches to local-only LLM routing.
+- **`apps/docs/docs/operations/air-gapped.md`** — Step-by-step air-gap
+  deployment guide: image pre-pulling, Ollama model loading, threat-feed
+  pre-seeding, and smoke-test checklist.
+
+#### WS-H1 — MSSP Console Improvements
+
+- **`services/api/app/api/v1/endpoints/mssp.py`** — New `GET /mssp/tenants`
+  aggregation endpoint: per-child tenant alert counts, open case counts, SLA
+  breach rate, and last-seen connector heartbeat.
+- **`services/api/app/models/tenant.py`** — Added `parent_tenant_id` and
+  `mssp_role` columns supporting the parent-child tenant hierarchy.
+
+#### WS-H2 — BYOK Per-Tenant LLM Credentials
+
+- **`services/api/app/api/v1/endpoints/llm_credentials.py`** — CRUD for per-tenant
+  LLM credential records. Secrets encrypted at rest via `CredentialVault`.
+- LLM routing layer (`services/api/app/core/config.py`) reads per-tenant
+  credentials before falling back to the platform-wide key.
+
+#### WS-H3 — Team Analytics View
+
+- **`apps/web/src/components/analytics/TeamAnalyticsView.tsx`** — Analyst
+  leaderboard with MTTR per analyst, alert disposition accuracy, cases closed
+  per shift, and false-positive rate trend over the selected window.
+
+#### WS-H4 — Air-Gapped / Ollama Local-LLM Mode
+
+- **`services/api/app/api/v1/endpoints/llm_status.py`** — Reports whether the
+  deployment is running in air-gap mode and which local models are available
+  via the Ollama sidecar. Used by the settings UI to auto-populate the model
+  picker.
+
+### Fixed
+
+- Ruff `E501/W291/W293/B007/B017/F821/I001` violations in `services/api`.
+- `mypy` errors across all 16 plan-modified files: `RowMapping` import,
+  `Optional` list `len()`, `current_user.user_id` rename, `fetchone()` None
+  checks, `sort_key` return type, `PYTHONPATH` subprocess handling.
+- Converted structlog-style `logger.info(key=value)` calls to stdlib formatting
+  in `rule_engine.py`, `neo4j.py`, and `digest_pdf.py`.
+- SQLAlchemy relationship `name-defined` mypy errors suppressed with
+  `# type: ignore[name-defined]` in `tenant.py` and `connector.py`.
+
+### Security caveat
+
+The `/api/v1/actors/*` endpoints are reachable on the `threatintel`
+service without RBAC enforcement in v0 — they assume cluster-internal
+network reachability only. Do **not** expose them through public
+ingress until a `Depends(require_permission(...))` guard is added.
+Tracked as a known limitation in the docs.
+
+---
 
 ### Added — Threat Actor Attribution Engine (v0)
 

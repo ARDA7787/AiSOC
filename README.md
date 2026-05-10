@@ -9,7 +9,7 @@ An open-source, self-hostable AI SOC. The agent's prompts, tool calls, and ratio
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Public eval harness: CI-gated](https://img.shields.io/badge/eval%20harness-CI--gated-2563eb?style=flat-square)](apps/docs/docs/benchmark.md)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-8b5cf6?style=flat-square)](CONTRIBUTING.md)
-[![Version](https://img.shields.io/badge/version-6.1.0-f59e0b?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-7.0.0-f59e0b?style=flat-square)](CHANGELOG.md)
 
 [Live demo](https://tryaisoc.com) · [How AiSOC compares](#how-aisoc-compares) · [Public eval harness](apps/docs/docs/benchmark.md) · [Deploy in 60 seconds](#deploy-in-60-seconds) · [Deployment options](#deployment-options) · [Architecture](#architecture) · [Docs](apps/docs/)
 
@@ -162,21 +162,25 @@ AiSOC bundles the components a SOC normally pieces together from separate vendor
 - **Phishing triage workflow** — submit raw email text, URLs, attachments, or domain indicators (`POST /phishing/submit`); the LLM extracts IOCs, assigns a verdict (phishing / benign / spam / malware / unknown), maps to MITRE ATT&CK, and optionally links the submission to an existing case.
 - **Knowledge-base + RAG** — ingest runbooks, policies, SOPs, and wikis (`POST /kb/ingest`); the API chunks and full-text indexes each document; analysts query with natural language (`POST /kb/query`) and receive the top matching chunks plus an LLM-synthesised answer with citation, backed by PostgreSQL FTS when no vector store is configured.
 
-### v1.5 — market-driven additions (2026-05-07)
+### v7.0 — buyer-value plan (2026-05-10)
 
-- **Autonomous alert triage agent** — a dedicated LLM agent in `services/agents/app/agents/auto_triage_agent.py` classifies incoming alerts as `true_positive`, `false_positive`, or `benign` with confidence scores, auto-closing low-confidence noise and escalating the rest. Backed by four sibling agents — phishing, identity, cloud, and insider-threat — each tuned to its domain.
-- **Conversational investigation chat** — multi-turn chat surface at `/investigate` lets analysts ask follow-up questions over the case, evidence, and ledger context without round-tripping through new tickets. Component: `apps/web/src/components/copilot/InvestigationChat.tsx`.
-- **MITRE ATT&CK coverage advisor** — surfaces the highest-impact gaps in detection coverage (technique-by-technique) and recommends rules to close them, ranked by adversary prevalence and risk. Page: `/coverage-advisor`.
-- **Shift handoff dashboard** — outgoing/incoming analysts see active cases, in-flight investigations, and queued approvals on one screen. Endpoints in `services/api/app/api/v1/endpoints/shifts.py`. Page: `/shifts`.
-- **EASM (External Attack Surface Management)** — asset discovery, exposed-service inventory, and certificate-expiry monitor for everything the org has accidentally pointed at the public internet. Page: `/easm`.
-- **MSSP executive dashboard** — multi-tenant rollup: KPIs, cross-tenant alert volumes, and per-customer SLA posture in one pane. Page: `/mssp`.
-- **Alert noise tuning dashboard** — per-rule false-positive rate, suppression candidates, and one-click tuning suggestions. Page: `/noise-tuning`.
-- **Team analytics & gamification** — analyst leaderboard, MTTR per analyst, dispositions accuracy, and shift workload balance. Page: `/analytics/team`.
-- **STIX 2.1 / TAXII 2.1 publishing** — push the tenant's IOCs and threat-actor profiles to upstream / community feeds via `services/api/app/api/v1/endpoints/stix_taxii.py`.
-- **Automated compliance evidence** — point-in-time evidence collection for SOC 2 / ISO 27001 / NIST CSF / PCI-DSS / HIPAA / DORA via `services/api/app/api/v1/endpoints/compliance.py`; surfaces in the Compliance dashboard.
-- **AI-generated incident reports** — one-click "Export Report" on every case generates a PDF incident report from the Investigation Ledger.
-- **Ten new connectors** — SentinelOne, Cortex XDR, Wiz, Snyk, Zscaler, Proofpoint, ServiceNow, Jira, 1Password, and Duo Security; bringing the total catalog to 26.
-- **Air-gap deployment configuration** — `services/api/app/api/v1/endpoints/deployment.py` exposes air-gap mode toggles for tenants that disallow external feeds.
+Shipped by Beenu Arora <beenu@cyble.com>. All 16 workstreams:
+
+- **Slack ChatOps bot** — `/aisoc triage`, `/aisoc approve`, `/aisoc status`, `/aisoc summary` slash commands + interactive approval buttons. Human-in-the-loop gate works from Slack without opening the console. 61 pytest cases. (`services/slack-bot/`)
+- **Executive digest PDF** — branded A4 PDF with KPI tiles, alert-volume chart, top-rule table, and remediation summary. Auto-emailed Monday 06:00 UTC via APScheduler. (`services/api/app/services/digest_pdf.py`, `weekly_digest_task.py`)
+- **AI investigation timeline (replayable)** — 684-line React component rendering the Investigation Ledger as a playable step-by-step timeline with scrubber. (`apps/web/src/components/copilot/InvestigationTimeline.tsx`)
+- **Case auto-summary + PDF export** — LLM-powered structured case summary (headline, severity rationale, recommended action, evidence links). (`case_summary.py`, `case_summary_html.py`)
+- **Playbook gallery** — 12 curated packs (Phishing, Ransomware, BEC, IAM Key Compromise, …) with TTP coverage badges and one-click import. 25 YAML templates added under `detections/playbooks/`.
+- **GitHub PR integration** — detection proposals automatically create draft PRs against the tenant's detection repo when promoted. (`services/api/app/services/github.py`)
+- **BYOK per-tenant LLM credentials UI** — provider picker (OpenAI, Azure OpenAI, Anthropic, Ollama), API-key input, model selector, temperature slider, and connection test. (`SettingsView.tsx`, `llm_credentials.py`)
+- **WCAG AA accessibility** — axe-core CI gate covers 5 views + 3 modals; sidebar landmark roles, ARIA labels, focus trapping, skip-nav link, colour-contrast fixes. (`apps/web/src/test/a11y.test.tsx`)
+- **Light theme persisted in user profile** — stored in `localStorage`, synced to `PATCH /api/v1/users/me/preferences`. (`ThemeProvider.tsx`)
+- **Saved views + drag-drop dashboard widgets** — widgets can be dragged, dropped, resized, pinned, removed; layout serialised to `POST /api/v1/saved-views`. (`DashboardView.tsx`, `saved_views.py`)
+- **Threat actor attribution engine v0** — weighted IOC / TTP / Tool / Target scoring against three seed actor profiles (APT28, APT29, Lazarus). `POST /actors/attribute`. (`services/threatintel/app/actors/attribution.py`)
+- **Air-gap / Ollama local-LLM mode** — `docker-compose.airgap.yml` override; disables external feed pullers, enables Ollama sidecar; step-by-step deployment guide in docs. (`docker-compose.airgap.yml`, `apps/docs/docs/operations/air-gapped.md`)
+- **MSSP console improvements** — `GET /mssp/tenants` aggregation: per-child alert counts, open cases, SLA breach rate, last-seen connector heartbeat; `parent_tenant_id` + `mssp_role` added to `Tenant` model.
+- **Team analytics view** — analyst leaderboard, MTTR per analyst, cases closed per shift, FP rate trend. (`TeamAnalyticsView.tsx`)
+- **Air-gap LLM status endpoint** — reports whether air-gap mode is active and which Ollama models are available; drives the settings UI model picker. (`llm_status.py`)
 
 Everything ships under MIT. Fork it, self-host it, audit it, extend it.
 

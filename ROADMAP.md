@@ -168,15 +168,41 @@ SOAR platforms drove this release.
 
 ---
 
-## v7.0 — Planned
+## v7.0 — Shipped ✅ (2026-05-10)
+
+All items below were shipped as part of the v1.0 buyer-value plan.
+Implemented and reviewed by Beenu Arora <beenu@cyble.com>.
+
+- [x] WCAG AA full accessibility pass (axe-core CI gate — `apps/web/src/test/a11y.test.tsx`)
+- [x] Light theme persisted in user profile (`ThemeProvider.tsx` + `PATCH /api/v1/users/me/preferences`)
+- [x] Saved views and custom drag-drop dashboard widgets per analyst (`saved_views.py` + `DashboardView.tsx`)
+- [x] AI-generated weekly executive digest — auto-emailed PDF (`digest_pdf.py` + `weekly_digest_task.py`)
+- [x] Slack native bot for alert triage without opening the UI (`services/slack-bot/` — 61 tests)
+- [x] Threat actor attribution engine v0 (`services/threatintel/app/actors/attribution.py`)
+- [x] Air-gap / Ollama local-LLM mode (`docker-compose.airgap.yml` + `apps/docs/docs/operations/air-gapped.md`)
+- [x] BYOK per-tenant LLM credentials UI + API (`llm_credentials.py` + `SettingsView.tsx`)
+- [x] MSSP console — per-child-tenant KPI aggregation, SLA posture, parent_tenant_id hierarchy
+- [x] Team analytics view — analyst MTTR, leaderboard, shift workload (`TeamAnalyticsView.tsx`)
+- [x] Case auto-summary + PDF export (`case_summary.py` + `case_summary_html.py`)
+- [x] Investigation timeline (replayable) (`InvestigationTimeline.tsx`)
+- [x] Playbook gallery with 12 curated packs + GitHub PR integration for detection proposals
+- [ ] Mobile responder console (React Native) — triage and acknowledge from phone _(deferred to v8.0)_
+- [ ] Plugin publishing marketplace v3 (commercial plugins, revenue sharing) _(deferred to v8.0)_
+
+---
+
+## v8.0 — Planned
 
 - Mobile responder console (React Native) — triage and acknowledge from phone
-- WCAG AA full accessibility pass
-- Light theme + brand-configurable white-label mode
-- Saved views and custom dashboard widgets per analyst
-- AI-generated weekly executive digest (auto-emailed PDF)
-- Slack / Teams native bot for alert triage without opening the UI
 - Plugin publishing marketplace v3 (commercial plugins, revenue sharing)
+- MSSP RBAC enforcement on `/api/v1/actors/*` endpoints (threat attribution)
+- Automated IOC sharing to community MISP instances via STIX/TAXII push
+- NL→query: "show me failed logins from new ASNs last 24h" → ES|QL / KQL
+- AI-generated threat intelligence briefings from public feeds
+- Embedded red-team scoring (ATT&CK coverage %) as a live dashboard widget
+- SLA breach predictor (ML model on historical MTTR data)
+- Incident cost estimator (breach impact calculator)
+- SOC-in-a-box one-click cloud deploy (Terraform module for AWS / GCP)
 
 ---
 
