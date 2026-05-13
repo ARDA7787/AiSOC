@@ -25,9 +25,7 @@ helper directly.
 from __future__ import annotations
 
 import pytest
-
 from app.scripts.seed_demo import _synthesise_confidence
-
 
 _REQUIRED_KEYS = {"factor", "label", "value", "contribution", "weight"}
 

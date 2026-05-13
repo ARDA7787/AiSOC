@@ -25,7 +25,6 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
-
 from app.api.v1.endpoints.alerts import AlertResponse
 
 
@@ -232,6 +231,4 @@ def test_sla_default_targets_strict_severity_ordering() -> None:
     order = ["critical", "high", "medium", "low", "info"]
     for key in ("mttd_target", "mttr_target", "mttc_target"):
         values = [DEFAULT_SLA_TARGETS[sev][key] for sev in order]
-        assert values == sorted(values), (
-            f"SLA {key} must widen across {order}: got {values}"
-        )
+        assert values == sorted(values), f"SLA {key} must widen across {order}: got {values}"
