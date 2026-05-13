@@ -2006,12 +2006,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tenants/me/identity:
+    get:
+      tags:
+      - tenants
+      summary: Get My Tenant Identity
+      description: 'Get minimal tenant identity for the current user.
+
+
+        Returns only `id`, `name`, `mssp_role`, and `parent_tenant_id`. This is
+
+        safe for **any** authenticated user (analyst, viewer, responder, etc.)
+
+        because it does not expose plan, settings, or limits. Used by the SOC
+
+        console TopBar to render the tenant switcher pill and role badge.'
+      operationId: get_my_tenant_identity_api_v1_tenants_me_identity_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantHeaderResponse'
+      security:
+      - HTTPBearer: []
   /api/v1/tenants/me:
     get:
       tags:
       - tenants
       summary: Get My Tenant
-      description: Get the current user's tenant details.
+      description: Get the current user's tenant details (full config — requires settings:read).
       operationId: get_my_tenant_api_v1_tenants_me_get
       responses:
         '200':
@@ -21525,6 +21550,42 @@ components:
       - created_at
       - updated_at
       title: TemplateOut
+    TenantHeaderResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          type: string
+          title: Name
+        mssp_role:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Mssp Role
+        parent_tenant_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Parent Tenant Id
+      type: object
+      required:
+      - id
+      - name
+      - mssp_role
+      - parent_tenant_id
+      title: TenantHeaderResponse
+      description: 'Minimal tenant identity payload — safe for *any* authenticated
+        user.
+
+
+        Used by the SOC console TopBar to render the tenant switcher and role
+
+        badge (Workstream 5). Intentionally excludes `plan`, `settings`, and
+
+        `limits` so it does not leak privileged config to viewer/analyst roles.'
     TenantNoteCreate:
       properties:
         child_id:
@@ -21600,6 +21661,17 @@ components:
           additionalProperties: true
           type: object
           title: Limits
+        mssp_role:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Mssp Role
+        parent_tenant_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Parent Tenant Id
         created_at:
           type: string
           format: date-time
