@@ -263,7 +263,18 @@ paths:
       tags:
       - alerts
       summary: List Alerts
-      description: List alerts for the current tenant with filtering and pagination.
+      description: 'List alerts for the current tenant with filtering and pagination.
+
+
+        `min_confidence` / `confidence_label` let the queue workbench (PR-5) and
+
+        /alerts page filter on the fusion-emitted confidence signal (W3). Alerts
+
+        that pre-date the confidence column will have NULL and therefore won''t
+
+        match either filter — that''s intentional; analysts who care about
+
+        confidence should only see alerts that actually carry the signal.'
       operationId: list_alerts_api_v1_alerts_get
       security:
       - HTTPBearer: []
@@ -324,6 +335,24 @@ paths:
           - type: string
           - type: 'null'
           title: Search
+      - name: min_confidence
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 100
+            minimum: 0
+          - type: 'null'
+          title: Min Confidence
+      - name: confidence_label
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Confidence Label
       responses:
         '200':
           description: Successful Response
@@ -12131,6 +12160,22 @@ components:
           items: {}
           type: array
           title: Ai Recommendations
+        confidence:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Confidence
+        confidence_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Confidence Label
+        confidence_rationale:
+          anyOf:
+          - items: {}
+            type: array
+          - type: 'null'
+          title: Confidence Rationale
         disposition:
           anyOf:
           - type: string
