@@ -343,6 +343,14 @@ class Settings(BaseSettings):
     REALTIME_BASE_URL: str = "http://realtime:8086"
     REALTIME_INTERNAL_TOKEN: str = ""
 
+    # SAML/OIDC session token signing secret. Consumed by ``app/auth/saml.py``
+    # and ``app/auth/oidc.py`` to mint AiSOC session JWTs after an external
+    # identity provider returns a successful authn response. We surface this
+    # as a real Settings field (not just ``os.getenv``) so that
+    # ``warn_if_insecure_defaults`` can be exercised deterministically in
+    # tests by passing ``JWT_SECRET=""`` instead of mutating the environment.
+    JWT_SECRET: str = ""
+
     # Relying party identity for WebAuthn / Passkey ceremonies. RP_ID must
     # match the eTLD+1 of the PWA origin (no scheme, no port). RP_NAME is
     # what the OS prompt shows the user.
@@ -632,6 +640,23 @@ def warn_if_insecure_defaults(s: Settings | None = None) -> list[str]:
     # round-trip in plaintext.
     if not is_dev_env(s.ENVIRONMENT) and not s.AISOC_CREDENTIAL_KEY:
         msgs.append("AISOC_CREDENTIAL_KEY is empty in a non-development environment — connector credentials cannot be encrypted at rest.")
+
+    # JWT signing secret used by the SAML/OIDC session-issuance paths in
+    # ``app/auth/saml.py`` and ``app/auth/oidc.py``. Those modules now refuse
+    # to sign tokens with an empty or well-known placeholder, but we still
+    # want a noisy boot-time warning so the operator sees the misconfig
+    # *before* the first SSO callback 500s.
+    if not is_dev_env(s.ENVIRONMENT) and (not s.JWT_SECRET or s.JWT_SECRET == "changeme-insecure-default"):
+        msgs.append(
+            "JWT_SECRET is empty or set to the well-known placeholder — SAML/OIDC "
+            "session token issuance will fail closed until you wire a real secret."
+        )
+
+    # Internal token used by the agents service to authenticate to the
+    # realtime service. We no longer ship a "changeme" default in code, but
+    # warn here so operators don't quietly run with no inter-service auth.
+    if not is_dev_env(s.ENVIRONMENT) and not s.REALTIME_INTERNAL_TOKEN:
+        msgs.append("REALTIME_INTERNAL_TOKEN is empty in a non-development environment — agent → realtime events are unauthenticated.")
 
     # Air-gap sanity check: if an operator flipped on AISOC_AIRGAPPED but
     # the LLM is still pointed at a public endpoint (api.openai.com, etc.)
