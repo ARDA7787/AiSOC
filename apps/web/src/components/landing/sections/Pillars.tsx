@@ -55,7 +55,7 @@ const PILLARS: ReadonlyArray<Pillar> = [
       'The entity graph is written while events are normalised, not when an analyst clicks "show graph." Schema v1.0 is published.',
     stat: '17 + 14',
     statLabel: 'node labels · relationships',
-    href: 'https://docs.aisoc.dev/architecture/graph-schema',
+    href: 'https://docs.tryaisoc.com/architecture/graph-schema',
     linkLabel: 'Read the graph schema',
   },
   {
@@ -66,7 +66,7 @@ const PILLARS: ReadonlyArray<Pillar> = [
       'Four named agents. Every prompt, tool call, and decision is logged. The LLM-input contract fails closed on malformed prompts.',
     stat: '4 / 100%',
     statLabel: 'agents · audited',
-    href: 'https://docs.aisoc.dev/architecture/agents',
+    href: 'https://docs.tryaisoc.com/architecture/agents',
     linkLabel: 'Read the agent contract',
   },
   {
@@ -77,7 +77,7 @@ const PILLARS: ReadonlyArray<Pillar> = [
       'Render, Fly.io, Kubernetes, AWS, your air-gapped rack — same code path. BYOK LLM credentials in the encrypted vault.',
     stat: '6 + 1',
     statLabel: 'deploy targets · air-gap overlay',
-    href: 'https://docs.aisoc.dev/deployment',
+    href: 'https://docs.tryaisoc.com/deployment',
     linkLabel: 'Read the deployment guide',
   },
 ];

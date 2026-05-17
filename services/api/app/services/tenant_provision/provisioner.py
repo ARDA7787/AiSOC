@@ -283,7 +283,7 @@ async def provision_from_waitlist(
     *,
     waitlist_entry_id: uuid.UUID,
     actor_email: str,
-    invite_base_url: str = "https://app.aisoc.dev",
+    invite_base_url: str = "https://tryaisoc.com",
     seed_demo: bool = True,
     demo_seeder: DemoSeederCallable | None = None,
     templates: TenantTemplateBundle | None = None,

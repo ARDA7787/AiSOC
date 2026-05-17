@@ -22,7 +22,7 @@ push can widen the bucket without a redeploy:
 
 The class is asyncio-safe and stores buckets in-process. A multi-replica
 deploy will get per-replica buckets — for v1 of T6.1 that is fine
-(``app.aisoc.dev`` runs single-replica at start). When we scale to
+(``tryaisoc.com`` runs single-replica at start). When we scale to
 multi-replica the limiter swaps to a Redis-backed implementation behind
 the same interface; the endpoint never changes.
 """

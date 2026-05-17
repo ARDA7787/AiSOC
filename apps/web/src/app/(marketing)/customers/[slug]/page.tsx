@@ -294,7 +294,7 @@ function RelatedFeatures({ study }: { study: CustomerStudy }) {
             More customer stories
           </Link>
           <a
-            href="mailto:hello@aisoc.dev"
+            href="mailto:hello@tryaisoc.com"
             className="inline-flex items-center gap-2 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-400"
           >
             Talk to us

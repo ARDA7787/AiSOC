@@ -6,7 +6,7 @@
  *
  * Three deploy-path cards in a 3-up grid (single column below `md`).
  *
- *   1. Managed (waitlist) — host on app.aisoc.dev.
+ *   1. Managed (waitlist) — host on tryaisoc.com.
  *   2. Self-host (recommended) — Render / Docker / Fly.io / Helm /
  *      AWS Terraform. The middle card is highlighted via a thicker
  *      emerald border + the existing emerald shadow-glow.

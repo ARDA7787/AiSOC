@@ -121,10 +121,10 @@ export default function BlogIndexPage() {
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-300">
               Send a one-paragraph pitch to{' '}
               <a
-                href="mailto:hello@aisoc.dev"
+                href="mailto:hello@tryaisoc.com"
                 className="text-brand-300 underline underline-offset-2 hover:text-brand-200"
               >
-                hello@aisoc.dev
+                hello@tryaisoc.com
               </a>{' '}
               or open an issue on{' '}
               <a

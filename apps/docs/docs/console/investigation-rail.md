@@ -54,7 +54,7 @@ The rail groups related entities into four buckets so the analyst can scan them 
 | Workflow | case ID, playbook run ID, ticket key |
 | Tenant | tenant slug, business unit, environment tag |
 
-Each entry has a `kind`, a `value`, an optional `displayLabel` (for example `analyst@aisoc.dev (Okta)`), and — most importantly — an optional `pivotPath`. When present, the rail renders the row as a `next/link`: clicking it sends the analyst straight to `AttackGraphView` or the corresponding workbench, with the entity prefocused. The whole point of this section is to make the queue a launchpad: every entity is a *verb*, not a label.
+Each entry has a `kind`, a `value`, an optional `displayLabel` (for example `analyst@tryaisoc.com (Okta)`), and — most importantly — an optional `pivotPath`. When present, the rail renders the row as a `next/link`: clicking it sends the analyst straight to `AttackGraphView` or the corresponding workbench, with the entity prefocused. The whole point of this section is to make the queue a launchpad: every entity is a *verb*, not a label.
 
 The grouping is computed server-side in `services/api/app/services/alert_rail.py` so the frontend never has to re-sort the list, and so two analysts looking at the same alert see exactly the same buckets in the same order.
 
@@ -111,15 +111,15 @@ The response is the `AlertDetailResponse` Pydantic contract:
   // ─── rail envelope (added in v1.5) ─────────────────────────────
   "narrative": "Fusion linked an Okta impossible-travel signal …",
   "related_entities": [
-    { "kind": "principal", "value": "analyst@aisoc.dev",
-      "display_label": "analyst@aisoc.dev (Okta)",
-      "pivot_path": "/graph?focus=user:analyst%40aisoc.dev" },
+    { "kind": "principal", "value": "analyst@tryaisoc.com",
+      "display_label": "analyst@tryaisoc.com (Okta)",
+      "pivot_path": "/graph?focus=user:analyst%40tryaisoc.com" },
     { "kind": "network",   "value": "203.0.113.42",
       "pivot_path": "/graph?focus=ip:203.0.113.42" }
   ],
   "mini_timeline": [
     { "id": "evt-1", "kind": "comment", "title": "Initial triage",
-      "actor": "tier1@aisoc.dev", "occurred_at": "2026-05-13T08:31:00Z" }
+      "actor": "tier1@tryaisoc.com", "occurred_at": "2026-05-13T08:31:00Z" }
   ],
   "recommended_actions": [
     { "priority": "critical",

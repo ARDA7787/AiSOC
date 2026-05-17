@@ -8,7 +8,7 @@
 - **Audience:** Lead UX designer (and the first illustrator / motion designer
   brought in to support the build).
 - **Purpose:** Provide everything needed to design a single marketing
-  landing page for AiSOC at `aisoc.dev`, plus a stripped-back logged-in
+  landing page for AiSOC at `tryaisoc.com`, plus a stripped-back logged-in
   product overview that lives behind the same brand. The designer should
   not have to read the repo to design the page.
 - **Deliverable:** Figma file (desktop + tablet + phone artboards) covering
@@ -38,7 +38,7 @@ to a replayable Investigation Ledger. It ships with 69 click-and-connect
 data sources, 6,998 detection rules, 62 playbook packs, and a public
 benchmark harness that gates every PR. You can self-host the whole stack
 in five minutes, take it air-gapped on a flag, or join the managed
-waitlist at `app.aisoc.dev` — same code in every direction.
+waitlist at `tryaisoc.com` — same code in every direction.
 
 ### Positioning statement (≈ 250 words)
 
@@ -782,7 +782,7 @@ The following are **not** part of this landing-page design effort:
 - The full pricing page (we ship a teaser; the full page is a follow-on).
 - The blog (`/blog`) — already exists at
   `apps/web/src/app/(marketing)/blog/page.tsx`.
-- The status page (`status.aisoc.dev`) — third-party service.
+- The status page (`status.tryaisoc.com`) — third-party service.
 - The Cursor extension marketplace listing (`services/mcp/cursor-extension/`)
   — separate visual asset, separate cadence.
 - Hiring / about pages — not committed to a date.

@@ -264,7 +264,7 @@ api_router.include_router(inbox_itsm.router)
 # queries without column-name guesswork.
 api_router.include_router(lake.router)
 
-# Managed-instance onboarding — T6.1 (`app.aisoc.dev` beta).
+# Managed-instance onboarding — T6.1 (`tryaisoc.com` beta).
 # /waitlist exposes the public signup + admin entries CRUD that feeds
 # the sales funnel; /admin/tenants promotes approved entries into live
 # tenants. Admin endpoints gate on `admin:waitlist` / `admin:tenants`

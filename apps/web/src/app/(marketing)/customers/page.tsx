@@ -141,10 +141,10 @@ export default function CustomersIndexPage() {
               </a>{' '}
               or reach out to{' '}
               <a
-                href="mailto:hello@aisoc.dev"
+                href="mailto:hello@tryaisoc.com"
                 className="text-brand-300 underline underline-offset-2 hover:text-brand-200"
               >
-                hello@aisoc.dev
+                hello@tryaisoc.com
               </a>
               .
             </p>

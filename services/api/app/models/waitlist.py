@@ -1,4 +1,4 @@
-"""Waitlist ORM model — T6.1 (`app.aisoc.dev` managed beta).
+"""Waitlist ORM model — T6.1 (`tryaisoc.com` managed beta).
 
 Persists every signup that lands on ``/waitlist`` so the support team can:
 

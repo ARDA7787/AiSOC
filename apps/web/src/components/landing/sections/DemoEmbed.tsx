@@ -141,7 +141,7 @@ export function DemoEmbed() {
                 />
               </div>
               <p className="hidden text-xs font-mono text-velvet-content-tertiary sm:block">
-                aisoc.dev/cases/INC-RT-001?tab=ledger
+                tryaisoc.com/cases/INC-RT-001?tab=ledger
               </p>
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-velvet-content-tertiary">
                 Live
@@ -288,7 +288,7 @@ export function DemoEmbed() {
             />
           </Link>
           <Link
-            href="https://docs.aisoc.dev/architecture"
+            href="https://docs.tryaisoc.com/architecture"
             className="inline-flex items-center gap-1 text-sm font-medium text-velvet-content-tertiary transition-colors duration-200 hover:text-velvet-content-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-velvet-emerald-mint focus-visible:ring-offset-2 focus-visible:ring-offset-velvet-surface-base"
           >
             Read the architecture

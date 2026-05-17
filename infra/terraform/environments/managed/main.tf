@@ -1,6 +1,6 @@
 # AiSOC — Managed Instance (T6.1)
 # =============================================================================
-# Provisions the single-tenant managed offering hosted at `app.aisoc.dev`.
+# Provisions the single-tenant managed offering hosted at `tryaisoc.com`.
 #
 # Components:
 #   • Fly.io application  — runs `services/api`, `services/agents`, the web
@@ -9,7 +9,7 @@
 #   • Fly.io Postgres     — managed primary + standby, encrypted at rest,
 #                          point-in-time recovery enabled.
 #   • Fly.io Redis        — managed Upstash-backed Redis (pubsub + cache).
-#   • Cloudflare DNS      — `app.aisoc.dev` CNAME → Fly.io edge.
+#   • Cloudflare DNS      — `tryaisoc.com` CNAME → Fly.io edge.
 #
 # This is the *skeleton*. The actual Fly.io provider is community-maintained
 # (`fly-apps/fly`) and the API surface is still moving; the operator who
@@ -168,11 +168,11 @@ resource "fly_redis" "primary" {
 }
 
 # -----------------------------------------------------------------------------
-# Cloudflare — DNS for app.aisoc.dev
+# Cloudflare — DNS for tryaisoc.com
 # -----------------------------------------------------------------------------
 #
 # Fly.io issues a per-app hostname (`<app>.fly.dev`). We point
-# `app.aisoc.dev` at it via a proxied CNAME so Cloudflare terminates
+# `tryaisoc.com` at it via a proxied CNAME so Cloudflare terminates
 # TLS in front of Fly's edge.
 
 resource "cloudflare_record" "app" {
@@ -186,7 +186,7 @@ resource "cloudflare_record" "app" {
 }
 
 # Optional second CNAME for the realtime hostname — many deployments
-# split `app.aisoc.dev` (HTTP) from `realtime.aisoc.dev` (websockets) so
+# split `tryaisoc.com` (HTTP) from `realtime.tryaisoc.com` (websockets) so
 # the WS connection budget isn't shared with API requests. Set
 # `var.realtime_hostname` to null to skip this record.
 resource "cloudflare_record" "realtime" {

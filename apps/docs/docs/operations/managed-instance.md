@@ -1,27 +1,27 @@
 ---
 sidebar_position: 13
-title: Managed instance (app.aisoc.dev)
+title: Managed instance (tryaisoc.com)
 description: How the AiSOC managed beta works — what's deployed, how a customer is onboarded, SLAs, and billing.
 ---
 
-# Managed instance (`app.aisoc.dev`)
+# Managed instance (`tryaisoc.com`)
 
 AiSOC is open source and self-hostable, but for teams who want a SOC up
 and running today — without owning the infrastructure — we run a
-**managed beta** at [`app.aisoc.dev`](https://app.aisoc.dev). This page
+**managed beta** at [`tryaisoc.com`](https://tryaisoc.com). This page
 documents how it works, who it's for, and the operational shape of the
 offering.
 
 > **Status: invite-only beta.** Capacity is rationed deliberately so we
 > can keep response times tight and feedback loops short with each
 > customer. To join the queue, submit the form at
-> [`app.aisoc.dev/waitlist`](https://app.aisoc.dev/waitlist).
+> [`tryaisoc.com/waitlist`](https://tryaisoc.com/waitlist).
 
 ## At a glance
 
 | Property | Value |
 |---|---|
-| **Hostname** | `app.aisoc.dev` (TLS terminated at Cloudflare) |
+| **Hostname** | `tryaisoc.com` (TLS terminated at Cloudflare) |
 | **Hosted on** | Fly.io (single app, multi-process) |
 | **Database** | Fly managed Postgres — primary + standby, PITR enabled |
 | **Cache / pubsub** | Fly managed Redis (Upstash-backed) |
@@ -39,7 +39,7 @@ The same code runs in three places:
    keys and the data. This is the canonical AiSOC deployment.
 2. **BYOC** — Terraform stack in `infra/terraform/byoc/` provisions
    AiSOC into the customer's own AWS account.
-3. **Managed (`app.aisoc.dev`)** — same code, hosted by the AiSOC
+3. **Managed (`tryaisoc.com`)** — same code, hosted by the AiSOC
    community on Fly.io. This is where the waitlist points.
 
 The managed offering exists for one reason: **letting a team try a
@@ -78,14 +78,14 @@ The Cloudflare edge in front of Fly.io handles:
 End-to-end this is a five-step flow. Every step has an audit-log entry.
 
 1. **Customer fills the waitlist form** at
-   [`app.aisoc.dev/waitlist`](https://app.aisoc.dev/waitlist). The POST
+   [`tryaisoc.com/waitlist`](https://tryaisoc.com/waitlist). The POST
    hits `/v1/waitlist/signup`, rate-limited per IP, and the entry lands
    in `aisoc_waitlist_entries` with status `new`.
 2. **The waitlist Slack notification** fires to the sales channel via
    `AISOC_WAITLIST_SLACK_WEBHOOK`. The Slack message links straight to
    `/admin/waitlist` for triage.
 3. **An operator reviews the entry** in
-   [`/admin/waitlist`](https://app.aisoc.dev/admin/waitlist) and
+   [`/admin/waitlist`](https://tryaisoc.com/admin/waitlist) and
    transitions the status from `new` → `contacted` once they've reached
    out, then `contacted` → `onboarded` (or `declined`) once the
    conversation has closed.
@@ -154,7 +154,7 @@ that with a small cohort of design partners than with a public price
 sheet that we have to walk back later.
 
 What we **do** care about is making LLM cost visible from day one. The
-[LLM cost dashboard](https://app.aisoc.dev/costs) (rolled out as WS-H1 of
+[LLM cost dashboard](https://tryaisoc.com/costs) (rolled out as WS-H1 of
 the v1.0 buyer-value plan) tracks every model call with token counts,
 provider, and run cost, scoped per tenant. When the beta exits and
 pricing lands, that dashboard is what we'll bill against — so

@@ -84,8 +84,8 @@ const DEPLOYMENT_MODES: DeploymentMode[] = [
     llm: 'Cloud APIs (default) · BYO',
     residency: 'EU · US · India',
     compliance: 'SOC 2 · GDPR (target)',
-    artefact: 'app.aisoc.dev',
-    artefactHref: 'mailto:hello@aisoc.dev?subject=AiSOC%20managed%20waitlist',
+    artefact: 'tryaisoc.com',
+    artefactHref: 'mailto:hello@tryaisoc.com?subject=AiSOC%20managed%20waitlist',
   },
 ];
 
@@ -155,7 +155,7 @@ export default function SovereignPage() {
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <a
-              href="mailto:hello@aisoc.dev?subject=AiSOC%20sovereign%20deployment"
+              href="mailto:hello@tryaisoc.com?subject=AiSOC%20sovereign%20deployment"
               className="inline-flex items-center gap-2 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-400"
             >
               Talk to us about sovereign deployment
@@ -422,10 +422,10 @@ export default function SovereignPage() {
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <a
-              href="mailto:hello@aisoc.dev?subject=AiSOC%20sovereign%20deployment"
+              href="mailto:hello@tryaisoc.com?subject=AiSOC%20sovereign%20deployment"
               className="inline-flex items-center gap-2 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-400"
             >
-              Email hello@aisoc.dev
+              Email hello@tryaisoc.com
             </a>
             <Link
               href="/customers"

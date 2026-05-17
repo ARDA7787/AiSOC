@@ -48,7 +48,7 @@ const TIERS: ReadonlyArray<Tier> = [
     tagline: 'We run it. You log in.',
     includes: [
       'Everything in Community',
-      'Managed instance on app.aisoc.dev',
+      'Managed instance on tryaisoc.com',
       'BYOK LLM',
       'Email support',
       'SOC 2 (in progress)',

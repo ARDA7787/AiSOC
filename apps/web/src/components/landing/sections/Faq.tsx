@@ -62,7 +62,7 @@ const FAQS: ReadonlyArray<QA> = [
   {
     q: 'What runs in production today?',
     a:
-      'Beta deployments through reference partners and an internal demo on tryaisoc.com. The managed waitlist at app.aisoc.dev is the route for hosted customers.',
+      'Beta deployments through reference partners and an internal demo on tryaisoc.com. The managed waitlist at tryaisoc.com is the route for hosted customers.',
   },
   {
     q: 'Why not just use an existing AI SOC vendor?',

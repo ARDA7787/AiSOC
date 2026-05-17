@@ -1,6 +1,6 @@
 # AiSOC — Managed Instance Terraform
 
-> **T6.1** — bootstrap stack for the `app.aisoc.dev` managed offering.
+> **T6.1** — bootstrap stack for the `tryaisoc.com` managed offering.
 
 This module provisions the single-tenant managed AiSOC deployment that
 sits behind the public `/waitlist` signup flow:
@@ -12,8 +12,8 @@ sits behind the public `/waitlist` signup flow:
   on the Fly side.
 - **Fly.io managed Redis** — Upstash-backed; `var.redis_url_override`
   lets an operator point at an external Redis instead.
-- **Cloudflare DNS** — a proxied `CNAME` record for `app.aisoc.dev` (and
-  optionally `realtime.aisoc.dev`) pointing at the Fly app.
+- **Cloudflare DNS** — a proxied `CNAME` record for `tryaisoc.com` (and
+  optionally `realtime.tryaisoc.com`) pointing at the Fly app.
 
 > **This is a skeleton.** It compiles a Terraform plan and represents
 > the canonical resource set, but the Fly community provider
@@ -34,8 +34,8 @@ init`:
 | ------------------------------------ | ---------------------------------------------------------- |
 | Terraform ≥ 1.7                      | `brew install terraform` or [download][tf-dl]              |
 | Fly.io org + auth token              | `fly orgs create aisoc` then `fly auth token`              |
-| Cloudflare zone for `aisoc.dev`      | Already exists; grab the **Zone ID** from the dashboard    |
-| Cloudflare API token (`Zone.DNS.Edit`) | [Create token][cf-tokens] scoped to the `aisoc.dev` zone |
+| Cloudflare zone for `tryaisoc.com`   | Already exists; grab the **Zone ID** from the dashboard    |
+| Cloudflare API token (`Zone.DNS.Edit`) | [Create token][cf-tokens] scoped to the `tryaisoc.com` zone |
 
 [tf-dl]: https://developer.hashicorp.com/terraform/install
 [cf-tokens]: https://dash.cloudflare.com/profile/api-tokens
@@ -110,7 +110,7 @@ All variables live in `variables.tf`. The ones that **must** be supplied
 | `cloudflare_zone_id`     | `export TF_VAR_cloudflare_zone_id=…`         |
 
 Everything else has a sensible default (Postgres sized for the beta
-cohort, Redis on the free Upstash plan, `iad` region, `app.aisoc.dev`
+cohort, Redis on the free Upstash plan, `iad` region, `tryaisoc.com`
 hostname). See `variables.tf` for the full list and per-variable
 validation rules.
 
@@ -128,7 +128,7 @@ After `terraform apply` succeeds:
 | `postgres_app_name`   | Fly app backing Postgres (used by `fly attach`)         |
 | `redis_app_name`      | Fly Redis name, or `null` if `redis_url_override` set   |
 | `redis_url`           | `sensitive` — the URL to pipe into `REDIS_URL`          |
-| `public_app_url`      | `https://app.aisoc.dev` (or whatever `app_hostname` is) |
+| `public_app_url`      | `https://tryaisoc.com` (or whatever `app_hostname` is) |
 | `cloudflare_record_id`| The Cloudflare DNS record id (useful for automation)    |
 | `bootstrap_checklist` | Plain-text operator checklist                           |
 

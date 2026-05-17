@@ -27,7 +27,7 @@ const NAV_LINKS: ReadonlyArray<{ label: string; href: string }> = [
   { label: 'Connectors', href: '#connectors' },
   { label: 'Benchmark', href: '#benchmark' },
   { label: 'Pricing', href: '#pricing' },
-  { label: 'Docs', href: 'https://docs.aisoc.dev' },
+  { label: 'Docs', href: 'https://docs.tryaisoc.com' },
 ];
 
 export function StickyNav() {
@@ -109,7 +109,7 @@ export function StickyNav() {
             Self-host
           </Link>
           <Link
-            href="https://app.aisoc.dev/signup"
+            href="https://tryaisoc.com/signup"
             className="group inline-flex items-center gap-1 rounded-md bg-velvet-emerald-cta px-4 py-1.5 text-sm font-semibold text-velvet-content-primary shadow-[0_1px_0_rgba(255,255,255,0.18)_inset] transition-[filter,box-shadow] duration-200 ease-landing-out-quart hover:brightness-110 motion-safe:hover:shadow-glow-emerald-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-velvet-emerald-mint focus-visible:ring-offset-2 focus-visible:ring-offset-velvet-surface-base"
           >
             Start free
@@ -167,7 +167,7 @@ export function StickyNav() {
             Self-host
           </a>
           <Link
-            href="https://app.aisoc.dev/signup"
+            href="https://tryaisoc.com/signup"
             onClick={() => setOpen(false)}
             className="flex-1 rounded-md bg-velvet-emerald-cta px-3 py-2 text-center text-sm font-semibold text-velvet-content-primary motion-safe:shadow-glow-emerald-sm"
           >

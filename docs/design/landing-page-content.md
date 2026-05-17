@@ -342,7 +342,7 @@
   - **Price:** `Contact us — waitlist`
   - **Tagline:** `We run it. You log in.`
   - **Includes:** `Everything in Community · managed instance on
-    `app.aisoc.dev` · BYOK LLM · email support · SOC 2 (in progress).`
+    `tryaisoc.com` · BYOK LLM · email support · SOC 2 (in progress).`
 - **Card — Enterprise**
   - **Price:** `Contact us`
   - **Tagline:** `Sovereign, air-gap, or single-tenant in your VPC.`
@@ -387,7 +387,7 @@
    Go) let you author your own in roughly 50 lines.`
 7. **Q.** `What runs in production today?`
    **A.** `Beta deployments through reference partners and an internal
-   demo on tryaisoc.com. The managed waitlist at app.aisoc.dev is the
+   demo on tryaisoc.com. The managed waitlist at tryaisoc.com is the
    route for hosted customers.`
 8. **Q.** `Why not just use an existing AI SOC vendor?`
    **A.** `Use whichever tools fit your risk and procurement model.

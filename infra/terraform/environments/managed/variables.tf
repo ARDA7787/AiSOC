@@ -30,7 +30,7 @@ variable "fly_api_token" {
 variable "cloudflare_api_token" {
   description = <<-EOT
     Cloudflare API token with `Zone.DNS.Edit` permission on the zone
-    that hosts `aisoc.dev`. Export as `TF_VAR_cloudflare_api_token`.
+    that hosts `tryaisoc.com`. Export as `TF_VAR_cloudflare_api_token`.
   EOT
   type        = string
   sensitive   = true
@@ -39,7 +39,7 @@ variable "cloudflare_api_token" {
 
 variable "cloudflare_zone_id" {
   description = <<-EOT
-    Cloudflare zone ID for the apex domain (e.g. `aisoc.dev`). Find it
+    Cloudflare zone ID for the apex domain (e.g. `tryaisoc.com`). Find it
     on the Cloudflare dashboard → Overview → API → Zone ID.
   EOT
   type        = string
@@ -147,17 +147,17 @@ variable "redis_url_override" {
 # -----------------------------------------------------------------------------
 
 variable "app_hostname" {
-  description = "Public hostname for the console + API (e.g. `app.aisoc.dev`)."
+  description = "Public hostname for the console + API (e.g. `tryaisoc.com`)."
   type        = string
-  default     = "app.aisoc.dev"
+  default     = "tryaisoc.com"
 }
 
 variable "realtime_hostname" {
   description = <<-EOT
     Optional public hostname for the websocket / realtime stream
-    (e.g. `realtime.aisoc.dev`). Set to `null` to share the main
+    (e.g. `realtime.tryaisoc.com`). Set to `null` to share the main
     hostname for WS traffic.
   EOT
   type        = string
-  default     = "realtime.aisoc.dev"
+  default     = "realtime.tryaisoc.com"
 }
