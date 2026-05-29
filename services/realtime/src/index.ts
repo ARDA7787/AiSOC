@@ -6,6 +6,7 @@ import { Kafka } from 'kafkajs';
 import Redis from 'ioredis';
 import pino from 'pino';
 import rateLimit from 'express-rate-limit';
+import jwt from 'jsonwebtoken';
 
 import { PushManager } from './push';
 
@@ -148,6 +149,21 @@ const server = http.createServer(app);
 type Channel = 'alerts' | 'cases' | 'agents' | 'insights' | 'graph' | 'all';
 const VALID_CHANNELS: Channel[] = ['alerts', 'cases', 'agents', 'insights', 'graph', 'all'];
 
+const JWT_SECRET = process.env.JWT_SECRET || '';
+if (!JWT_SECRET) {
+  log.warn('JWT_SECRET is not set — all WS/SSE connections will be rejected');
+}
+
+function verifyToken(token: string | null | undefined): boolean {
+  if (!token || !JWT_SECRET) return false;
+  try {
+    jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const wss = new WebSocketServer({ noServer: true });
 
 server.on('upgrade', (req, socket, head) => {
@@ -161,6 +177,13 @@ server.on('upgrade', (req, socket, head) => {
   }
   const requested = (parts[1] as Channel | undefined) || 'all';
   if (!VALID_CHANNELS.includes(requested)) {
+    socket.destroy();
+    return;
+  }
+  const upgradeUrl = new URL(req.url || '/', 'http://localhost');
+  const token = upgradeUrl.searchParams.get('token');
+  if (!verifyToken(token)) {
+    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
     socket.destroy();
     return;
   }
@@ -314,6 +337,11 @@ const internalPushRateLimit = rateLimit({
 
 // --- SSE endpoint ---
 app.get('/sse', sseRateLimit, (req, res) => {
+  const token = req.query.token as string | undefined;
+  if (!verifyToken(token)) {
+    res.status(401).json({ error: 'unauthorized' });
+    return;
+  }
   const tenantId = (req.query.tenant_id as string) || 'default';
 
   res.setHeader('Content-Type', 'text/event-stream');

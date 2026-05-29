@@ -6,6 +6,7 @@ MIT License
 
 import logging
 import os
+import secrets
 import warnings
 from functools import lru_cache
 from typing import Any, Final
@@ -133,7 +134,7 @@ class Settings(BaseSettings):
     API_PREFIX: str = "/api/v1"
 
     # Security
-    SECRET_KEY: str = "change-me-in-production-at-least-32-chars"
+    SECRET_KEY: str = secrets.token_hex(32)
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ALGORITHM: str = "HS256"
