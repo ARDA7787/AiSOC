@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Customizable dashboard / report builder (Wave 7).** A declarative report is
+  a list of widgets (whitelisted `type` × data `source`), validated for unknown
+  types/sources, duplicate ids, and bounded size, then rendered by resolving
+  each widget's data server-side — resilient to a failing/missing resolver (one
+  bad widget renders an `error`, never breaks the report). `POST
+  /report-builder/validate` + `/render` (the latter wires the real tenant-scoped
+  `alerts_by_severity` resolver). The same definition can drive the live
+  dashboard and an exported report. Gated by `test_report_builder.py` (8 cases).
 - **Compliance mapping + agentless CSPM + destinations (Wave 6).** (1) An
   **agentless CSPM scan engine** (`cspm.scan_resources` + `POST /posture/scan`):
   evaluates a read-only cloud-resource snapshot against misconfiguration checks
