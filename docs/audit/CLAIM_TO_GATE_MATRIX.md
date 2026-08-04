@@ -56,10 +56,13 @@ Statuses: `GATED` (a CI job fails when the claim stops being true) · `PARTIAL` 
 | Detections can be authored in Python (`def rule(event)`) with a fixture gate | README (detection engineering) | `python-detections.yml` (`aisoc_detections.runner` fails a blind rule that misses a positive or a noisy one that fires on a negative; every bundled detection must ship ≥1 positive + ≥1 negative case) + `test_framework.py` (fail-closed evaluate, metadata validation) | GATED | - |
 | AI Detection Builder: NL → rule + AUTO-generated fixtures → non-circular eval-gate → governed proposal | README (detection engineering) | `ci.yml` api job (`test_ai_detection_builder.py` — fixtures are DERIVED from the generated rule's own selection, not invented, and genuinely pass the non-circular gate: fires on the positive, quiet on the negative) | GATED | - |
 | No-code / simple detection builder compiles to a valid rule | README (detection engineering) | `ci.yml` web type-check + lint (`SimpleRuleBuilder.tsx` `buildSigma` compiles field/operator/value rows to Sigma, dropped into the governed editor) | GATED | - |
+| Response actions run under least-privilege for the invoking identity | README (autonomy + safety) | `actions` job (`test_authz.py` — `authorize_action` denies a principal lacking the action's blast-radius permission; tier hierarchy + wildcards; tenant binding) | GATED | - |
+| Actions-service mutating routes are authenticated (fail-closed in prod) | README (autonomy + safety) | `actions` job (`test_authz.py` — `require_service_auth` returns 401 on a bad/absent bearer token, 503 when unconfigured in production, open only in dev mode) | GATED | - |
+| Approvals are bound to a qualified approver (separation of duties) | README (autonomy + safety) | `actions` job (`test_authz.py` — `authorize_approver` requires the action's permission and rejects the requester approving their own action) | GATED | - |
 
 ## Summary
 
-- GATED: 39
+- GATED: 42
 - PARTIAL: 9
 - NO GATE: 0 (**every claim is now backed by a failing test.** The last NO GATE — the weekly benchmark scoreboard running live against `main` — closed in Phase E1: `scripts/check_scoreboard.py` ties the published scoreboard to a deterministic per-PR live-agent MITRE-accuracy run, while the funded weekly `wet-eval.yml` appends the LLM-tier rows. The full Fully-Operational roadmap (Phases A1–E1) is complete. The 7 remaining PARTIAL rows are honest, named deferrals to future phases outside the A–E scope — each states the specific gap and the phase that closes it — not unproven claims.)
 
