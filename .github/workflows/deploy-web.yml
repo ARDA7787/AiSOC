@@ -1,0 +1,57 @@
+name: Deploy Web to Fly
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/web/**"
+      - "packages/types/**"
+      - "packages/ui/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy aisoc-demo-web
+    runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Install flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # master
+
+      - name: Deploy to Fly
+        run: |
+          set -uo pipefail
+          # Deploy only when the demo app is actually provisioned. The public
+          # Fly demo can be torn down / re-provisioned out-of-band; when the
+          # app is absent (or no token is configured) a hard `flyctl deploy`
+          # fails the run with "app not found" and turns main red for an
+          # infra state that isn't a code problem. Skip cleanly instead — the
+          # deploy auto-resumes as soon as the app exists again.
+          if [ -z "${FLY_API_TOKEN:-}" ]; then
+            echo "::warning title=deploy-web::FLY_API_TOKEN not set — skipping deploy (demo not provisioned)."
+            exit 0
+          fi
+          if ! flyctl status --app aisoc-demo-web >/dev/null 2>&1; then
+            echo "::warning title=deploy-web::Fly app 'aisoc-demo-web' not found — skipping deploy. Recreate it (flyctl apps create aisoc-demo-web) or refresh FLY_API_TOKEN to auto-resume deploys."
+            exit 0
+          fi
+          flyctl deploy \
+            --remote-only \
+            --dockerfile apps/web/Dockerfile \
+            --config apps/web/fly.toml \
+            .
